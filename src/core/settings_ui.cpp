@@ -209,11 +209,17 @@ update_and_draw_settings_ui(Input* input, int context,
 				}
 			}
 		} else {
-			if (context < 0 && dir != 0) {
-				ctrl_game_tab = 1 - ctrl_game_tab;
-				set_row = 0;
-				play_tone(520, 35, 0.14f);
-				return false;
+			if (dir != 0) {
+				if (set_row == num_ctrl_binds) {
+					if (ctrl_game_tab == 0) pong_binds.mouse_1p = !pong_binds.mouse_1p;
+					else                    breaker_binds.mouse_aim = !breaker_binds.mouse_aim;
+					play_tone(520, 40, 0.15f);
+				} else if (context < 0) {
+					ctrl_game_tab = 1 - ctrl_game_tab;
+					set_row = 0;
+					play_tone(520, 35, 0.14f);
+					return false;
+				}
 			}
 			if (activate) {
 				if (set_row < num_ctrl_binds) {
@@ -355,3 +361,4 @@ update_and_draw_settings_ui(Input* input, int context,
 	                   0.f, -40.5f, 0.28f, text_dim);
 	return false;
 }
+
