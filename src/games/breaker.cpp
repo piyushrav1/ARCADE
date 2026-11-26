@@ -141,8 +141,8 @@ next_rand() {
 }
 
 internal void
-sfx(int freq_hz, int duration_ms, float vol = 0.22f) {
-	if (!is_audio_muted()) play_tone(freq_hz, duration_ms, vol);
+sfx(int freq_hz, int duration_ms, float vol = 0.22f, int freq_end_hz = 0) {
+	if (!is_audio_muted()) play_tone(freq_hz, duration_ms, vol, (float)freq_end_hz);
 }
 
 internal u32
@@ -257,7 +257,7 @@ damage_brick(int r, int c) {
 	if (b->kind == BRICK_NONE) return;
 	if (b->kind == BRICK_STEEL) {
 		b->flash = 1.f;
-		sfx(220, 30, 0.14f);
+		sfx(960, 40, 0.16f, 420);
 		return;
 	}
 
@@ -273,18 +273,31 @@ damage_brick(int r, int c) {
 		if (destroyed_kind == BRICK_TNT) {
 			shake_timer = 0.20f;
 			shake_mag = 1.1f;
-			sfx(160, 140, 0.28f);
+			sfx(240, 220, 0.32f, 55);
 			for (int dr = -1; dr <= 1; dr++) {
 				for (int dc = -1; dc <= 1; dc++) {
 					if (dr != 0 || dc != 0) damage_brick(r + dr, c + dc);
 				}
 			}
 		} else {
-			sfx(480 + clamp(0, combo * 30, 360), 40, 0.18f);
+			int pitch_boost = clamp(0, combo * 35, 350);
+			if (destroyed_kind == BRICK_3HIT) {
+				sfx(700 + pitch_boost, 60, 0.22f, 1040 + pitch_boost);
+			} else if (destroyed_kind == BRICK_2HIT) {
+				sfx(600 + pitch_boost, 50, 0.20f, 880 + pitch_boost);
+			} else {
+				sfx(520 + pitch_boost, 45, 0.18f, 760 + pitch_boost);
+			}
 			maybe_spawn_powerup(b->x, b->y);
 		}
 	} else {
-		sfx(360, 35, 0.16f);
+		if (b->kind == BRICK_3HIT && b->hp == 2) {
+			sfx(210, 60, 0.19f, 130);
+		} else if (b->kind == BRICK_3HIT) {
+			sfx(340, 50, 0.18f, 220);
+		} else {
+			sfx(300, 50, 0.18f, 180);
+		}
 	}
 }
 
