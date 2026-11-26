@@ -1,0 +1,222 @@
+#include "renderer.h"
+
+global_variable float render_scale = 0.01f;
+float render_offset_x = 0.f;
+float render_offset_y = 0.f;
+
+void
+clear_screen(u32 color) {
+	if (!render_state.memory) return;
+	u32* pixel = (u32*)render_state.memory;
+	int total = render_state.width * render_state.height;
+	for (int i = 0; i < total; i++) {
+		*pixel++ = color;
+	}
+}
+
+internal void
+world_rect_to_pixels(float x, float y, float half_size_x, float half_size_y,
+                     int* out_x0, int* out_y0, int* out_x1, int* out_y1) {
+	x += render_offset_x;
+	y += render_offset_y;
+
+	float scale = render_state.height * render_scale;
+	x = x * scale + render_state.width * 0.5f;
+	y = y * scale + render_state.height * 0.5f;
+	half_size_x *= scale;
+	half_size_y *= scale;
+
+	*out_x0 = clamp(0, (int)(x - half_size_x), render_state.width);
+	*out_x1 = clamp(0, (int)(x + half_size_x), render_state.width);
+	*out_y0 = clamp(0, (int)(y - half_size_y), render_state.height);
+	*out_y1 = clamp(0, (int)(y + half_size_y), render_state.height);
+}
+
+void
+draw_rect(float x, float y, float half_size_x, float half_size_y, u32 color) {
+	if (!render_state.memory) return;
+	int x0, y0, x1, y1;
+	world_rect_to_pixels(x, y, half_size_x, half_size_y, &x0, &y0, &x1, &y1);
+
+	for (int py = y0; py < y1; py++) {
+		u32* pixel = (u32*)render_state.memory + x0 + py * render_state.width;
+		for (int px = x0; px < x1; px++) {
+			*pixel++ = color;
+		}
+	}
+}
+
+void
+draw_rect_alpha(float x, float y, float half_size_x, float half_size_y, u32 color, float alpha) {
+	if (!render_state.memory) return;
+	int x0, y0, x1, y1;
+	world_rect_to_pixels(x, y, half_size_x, half_size_y, &x0, &y0, &x1, &y1);
+	alpha = clampf(0.f, alpha, 1.f);
+
+	u8 sr = (color >> 16) & 0xff;
+	u8 sg = (color >> 8) & 0xff;
+	u8 sb = color & 0xff;
+	float inv = 1.f - alpha;
+
+	for (int py = y0; py < y1; py++) {
+		u32* pixel = (u32*)render_state.memory + x0 + py * render_state.width;
+		for (int px = x0; px < x1; px++) {
+			u32 dst = *pixel;
+			u8 dr = (dst >> 16) & 0xff;
+			u8 dg = (dst >> 8) & 0xff;
+			u8 db = dst & 0xff;
+			u8 r = (u8)(dr * inv + sr * alpha);
+			u8 g = (u8)(dg * inv + sg * alpha);
+			u8 b = (u8)(db * inv + sb * alpha);
+			*pixel++ = (r << 16) | (g << 8) | b;
+		}
+	}
+}
+
+struct Glyph5x7 {
+	char c;
+	u8 rows[7];
+};
+
+global_variable const Glyph5x7 FONT_5X7[] = {
+	{'A', {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}},
+	{'B', {0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E}},
+	{'C', {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E}},
+	{'D', {0x1E,0x11,0x11,0x11,0x11,0x11,0x1E}},
+	{'E', {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F}},
+	{'F', {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10}},
+	{'G', {0x0E,0x11,0x10,0x17,0x11,0x11,0x0F}},
+	{'H', {0x11,0x11,0x11,0x1F,0x11,0x11,0x11}},
+	{'I', {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E}},
+	{'J', {0x07,0x02,0x02,0x02,0x12,0x12,0x0C}},
+	{'K', {0x11,0x12,0x14,0x18,0x14,0x12,0x11}},
+	{'L', {0x10,0x10,0x10,0x10,0x10,0x10,0x1F}},
+	{'M', {0x11,0x1B,0x15,0x15,0x11,0x11,0x11}},
+	{'N', {0x11,0x19,0x15,0x13,0x11,0x11,0x11}},
+	{'O', {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E}},
+	{'P', {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10}},
+	{'Q', {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D}},
+	{'R', {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11}},
+	{'S', {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E}},
+	{'T', {0x1F,0x04,0x04,0x04,0x04,0x04,0x04}},
+	{'U', {0x11,0x11,0x11,0x11,0x11,0x11,0x0E}},
+	{'V', {0x11,0x11,0x11,0x11,0x11,0x0A,0x04}},
+	{'W', {0x11,0x11,0x11,0x15,0x15,0x1B,0x11}},
+	{'X', {0x11,0x11,0x0A,0x04,0x0A,0x11,0x11}},
+	{'Y', {0x11,0x11,0x0A,0x04,0x04,0x04,0x04}},
+	{'Z', {0x1F,0x01,0x02,0x04,0x08,0x10,0x1F}},
+	{'0', {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E}},
+	{'1', {0x04,0x0C,0x04,0x04,0x04,0x04,0x0E}},
+	{'2', {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F}},
+	{'3', {0x1F,0x02,0x04,0x02,0x01,0x11,0x0E}},
+	{'4', {0x02,0x06,0x0A,0x12,0x1F,0x02,0x02}},
+	{'5', {0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E}},
+	{'6', {0x06,0x08,0x10,0x1E,0x11,0x11,0x0E}},
+	{'7', {0x1F,0x01,0x02,0x04,0x08,0x08,0x08}},
+	{'8', {0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E}},
+	{'9', {0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C}},
+	{':', {0x00,0x04,0x04,0x00,0x04,0x04,0x00}},
+	{'-', {0x00,0x00,0x00,0x1F,0x00,0x00,0x00}},
+	{'!', {0x04,0x04,0x04,0x04,0x04,0x00,0x04}},
+	{'/', {0x01,0x02,0x02,0x04,0x08,0x08,0x10}},
+	{'(', {0x02,0x04,0x08,0x08,0x08,0x04,0x02}},
+	{')', {0x08,0x04,0x02,0x02,0x02,0x04,0x08}},
+	{'>', {0x10,0x08,0x04,0x02,0x04,0x08,0x10}},
+	{'<', {0x02,0x04,0x08,0x10,0x08,0x04,0x02}},
+	{'.', {0x00,0x00,0x00,0x00,0x00,0x00,0x04}},
+	{'+', {0x00,0x04,0x04,0x1F,0x04,0x04,0x00}},
+	{'_', {0x00,0x00,0x00,0x00,0x00,0x00,0x1F}},
+};
+
+internal const u8*
+find_glyph(char c) {
+	if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+	int count = (int)(sizeof(FONT_5X7) / sizeof(FONT_5X7[0]));
+	for (int i = 0; i < count; i++) {
+		if (FONT_5X7[i].c == c) return FONT_5X7[i].rows;
+	}
+	return 0;
+}
+
+internal void
+draw_text_at(const char* text, float start_x, float cy, float pixel_size, u32 color, int len) {
+	float char_w = 5.f * pixel_size;
+	float spacing = 1.5f * pixel_size;
+
+	for (int i = 0; i < len; i++) {
+		const u8* rows = find_glyph(text[i]);
+		if (rows) {
+			float gx = start_x + i * (char_w + spacing);
+			for (int r = 0; r < 7; r++) {
+				for (int col = 0; col < 5; col++) {
+					if (rows[r] & (1 << (4 - col))) {
+						float px = gx + (col + 0.5f) * pixel_size;
+						float py = cy + (3.f - r) * pixel_size;
+						draw_rect(px, py, pixel_size * 0.52f, pixel_size * 0.52f, color);
+					}
+				}
+			}
+		}
+	}
+}
+
+void
+draw_text_centered(const char* text, float cx, float cy, float pixel_size, u32 color) {
+	int len = 0;
+	while (text[len]) len++;
+	if (len == 0) return;
+
+	float char_w = 5.f * pixel_size;
+	float spacing = 1.5f * pixel_size;
+	float total_w = len * char_w + (len - 1) * spacing;
+	draw_text_at(text, cx - total_w * 0.5f, cy, pixel_size, color, len);
+}
+
+void
+draw_text_left(const char* text, float left_x, float cy, float pixel_size, u32 color) {
+	int len = 0;
+	while (text[len]) len++;
+	if (len == 0) return;
+
+	draw_text_at(text, left_x, cy, pixel_size, color, len);
+}
+
+void
+draw_number(int num, float cx, float cy, float pixel_size, u32 color) {
+	char buf[16];
+	int idx = 0;
+	if (num == 0) {
+		buf[idx++] = '0';
+	} else {
+		if (num < 0) num = -num;
+		char rev[16];
+		int r = 0;
+		while (num > 0 && r < 15) {
+			rev[r++] = (char)('0' + (num % 10));
+			num /= 10;
+		}
+		while (r > 0) buf[idx++] = rev[--r];
+	}
+	buf[idx] = 0;
+	draw_text_centered(buf, cx, cy, pixel_size, color);
+}
+
+void
+draw_crt_scanlines(float darken_alpha) {
+	if (!render_state.memory) return;
+	darken_alpha = clampf(0.f, darken_alpha, 0.9f);
+	float keep = 1.f - darken_alpha;
+	int w = render_state.width;
+	int h = render_state.height;
+	for (int y = 0; y < h; y += 3) {
+		u32* row = (u32*)render_state.memory + y * w;
+		for (int x = 0; x < w; x++) {
+			u32 c = row[x];
+			u8 r = (u8)(((c >> 16) & 0xff) * keep);
+			u8 g = (u8)(((c >> 8) & 0xff) * keep);
+			u8 b = (u8)((c & 0xff) * keep);
+			row[x] = (r << 16) | (g << 8) | b;
+		}
+	}
+}
+
