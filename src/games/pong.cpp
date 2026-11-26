@@ -463,7 +463,7 @@ update(Input* input, float dt, float fps) {
 		for (int i = 0; i < MENU_ITEMS; i++) {
 			float y = 16.f - i * 6.5f;
 			if (in_rect(mx, my, 0.f, y, 48.f, 2.8f)) {
-				if (input->mouse_moved && menu_selection != i) {
+				if ((input->mouse_moved || clicked) && menu_selection != i) {
 					menu_selection = i;
 					sfx(440, 24, 0.10f);
 				}

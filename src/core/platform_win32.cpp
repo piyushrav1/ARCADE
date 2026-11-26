@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "platform.h"
 #include "renderer.h"
+#include "save.h"
 
 global_variable bool running = true;
 global_variable bool window_lost_focus = false;
@@ -358,6 +359,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		input.text_input[0] = 0;
 		if (window_lost_focus) {
 			window_lost_focus = false;
+			set_cursor_visible(true);
 			for (int i = 0; i < BUTTON_COUNT; i++) {
 				input.buttons[i].is_down = false;
 			}
@@ -481,6 +483,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		frame_begin_time = frame_end_time;
 	}
 
+	save_user_data();
 	audio_shutdown();
 	return 0;
 }
