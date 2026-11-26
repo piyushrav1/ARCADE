@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "renderer.h"
 #include "keybinds.h"
+#include "audio_ui.h"
 #include "game_interface.h"
 
 #define is_down(b) input->buttons[b].is_down
@@ -13,6 +14,7 @@ enum Game_State {
 	STATE_MENU,
 	STATE_LEVEL_SELECT,
 	STATE_CONTROLS,
+	STATE_SOUND,
 	STATE_PLAYING,
 	STATE_PAUSED,
 	STATE_LEVEL_CLEAR,
@@ -447,13 +449,23 @@ update(Input* input, float dt) {
 		return GAME_CONTINUE;
 	}
 
+	if (game_state == STATE_SOUND) {
+		if (update_and_draw_audio_ui(input,
+		                             0x0B1120, 0x0F172A, 0x334155,
+		                             0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+			game_state = controls_return;
+		}
+		return GAME_CONTINUE;
+	}
+
 	if (game_state == STATE_MENU) {
-		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { menu_sel = (menu_sel + 3) % 4; sfx(440, 35, 0.15f); }
-		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { menu_sel = (menu_sel + 1) % 4; sfx(440, 35, 0.15f); }
+		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { menu_sel = (menu_sel + 4) % 5; sfx(440, 35, 0.15f); }
+		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { menu_sel = (menu_sel + 1) % 5; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
 			if (menu_sel == 0) start_campaign(0);
 			else if (menu_sel == 1) { level_sel = 0; game_state = STATE_LEVEL_SELECT; }
 			else if (menu_sel == 2) { controls_return = STATE_MENU; game_state = STATE_CONTROLS; }
+			else if (menu_sel == 3) { controls_return = STATE_MENU; game_state = STATE_SOUND; }
 			else {
 				render_offset_x = 0.f; render_offset_y = 0.f;
 				return GAME_EXIT_TO_HUB;
@@ -467,12 +479,13 @@ update(Input* input, float dt) {
 
 		draw_world(false);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.78f);
-		draw_text_centered("NEON BREAKER", 0.f, 25.f, 1.25f, 0x22D3EE);
-		draw_text_centered("PLAY CAMPAIGN", 0.f,  6.f, 0.56f, menu_sel == 0 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("LEVEL SELECT",  0.f, -3.f, 0.56f, menu_sel == 1 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("CONTROLS",      0.f,-12.f, 0.56f, menu_sel == 2 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("BACK TO HUB",   0.f,-21.f, 0.56f, menu_sel == 3 ? 0xEF4444 : 0xF1F5F9);
-		draw_text_centered(">", -36.f, 6.f - menu_sel * 9.f, 0.56f, 0x22D3EE);
+		draw_text_centered("NEON BREAKER", 0.f, 27.f, 1.20f, 0x22D3EE);
+		draw_text_centered("PLAY CAMPAIGN", 0.f,  9.f, 0.52f, menu_sel == 0 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("LEVEL SELECT",  0.f,  1.f, 0.52f, menu_sel == 1 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("CONTROLS",      0.f, -7.f, 0.52f, menu_sel == 2 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("SOUND",         0.f,-15.f, 0.52f, menu_sel == 3 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("BACK TO HUB",   0.f,-23.f, 0.52f, menu_sel == 4 ? 0xEF4444 : 0xF1F5F9);
+		draw_text_centered(">", -36.f, 9.f - menu_sel * 8.f, 0.52f, 0x22D3EE);
 		draw_text_centered("MOUSE / KEYBOARD SUPPORTED   ESC: HUB   M: MUTE", 0.f, -38.f, 0.32f, 0x64748B);
 		return GAME_CONTINUE;
 	}
@@ -501,23 +514,25 @@ update(Input* input, float dt) {
 
 	if (game_state == STATE_PAUSED) {
 		if (vk_pressed(input, breaker_binds.pause) || pressed(BUTTON_P)) { game_state = STATE_PLAYING; return GAME_CONTINUE; }
-		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { pause_sel = (pause_sel + 3) % 4; sfx(440, 35, 0.15f); }
-		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { pause_sel = (pause_sel + 1) % 4; sfx(440, 35, 0.15f); }
+		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { pause_sel = (pause_sel + 4) % 5; sfx(440, 35, 0.15f); }
+		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { pause_sel = (pause_sel + 1) % 5; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
 			if (pause_sel == 0) game_state = STATE_PLAYING;
 			else if (pause_sel == 1) load_level(current_level);
 			else if (pause_sel == 2) { controls_return = STATE_PAUSED; game_state = STATE_CONTROLS; }
+			else if (pause_sel == 3) { controls_return = STATE_PAUSED; game_state = STATE_SOUND; }
 			else game_state = STATE_MENU;
 			return GAME_CONTINUE;
 		}
 		draw_world(true);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.75f);
-		draw_text_centered("PAUSED",        0.f,  22.f, 1.0f, 0x22D3EE);
-		draw_text_centered("RESUME",        0.f,   6.f, 0.56f, pause_sel == 0 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("RESTART LEVEL", 0.f,  -3.f, 0.56f, pause_sel == 1 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("CONTROLS",      0.f, -12.f, 0.56f, pause_sel == 2 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("MAIN MENU",     0.f, -21.f, 0.56f, pause_sel == 3 ? 0xF59E0B : 0xF1F5F9);
-		draw_text_centered(">", -36.f, 6.f - pause_sel * 9.f, 0.56f, 0x22D3EE);
+		draw_text_centered("PAUSED",        0.f,  24.f, 1.0f, 0x22D3EE);
+		draw_text_centered("RESUME",        0.f,   9.f, 0.52f, pause_sel == 0 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("RESTART LEVEL", 0.f,   1.f, 0.52f, pause_sel == 1 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("CONTROLS",      0.f,  -7.f, 0.52f, pause_sel == 2 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("SOUND",         0.f, -15.f, 0.52f, pause_sel == 3 ? 0x38BDF8 : 0xF1F5F9);
+		draw_text_centered("MAIN MENU",     0.f, -23.f, 0.52f, pause_sel == 4 ? 0xF59E0B : 0xF1F5F9);
+		draw_text_centered(">", -36.f, 9.f - pause_sel * 8.f, 0.52f, 0x22D3EE);
 		return GAME_CONTINUE;
 	}
 

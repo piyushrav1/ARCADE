@@ -31,6 +31,9 @@ global_variable s16 wave_bufs[AUDIO_NUM_BUFS][AUDIO_BUF_SAMPLES];
 global_variable Sfx_Voice sfx_voices[MAX_SFX_VOICES];
 global_variable bool audio_muted = false;
 global_variable bool bgm_enabled = true;
+global_variable int  master_vol_pct = 100;
+global_variable int  music_vol_pct = 80;
+global_variable int  sfx_vol_pct = 100;
 
 global_variable const float BGM_LEAD[32] = {
 	523.25f, 0.f, 659.25f, 783.99f,  659.25f, 0.f, 523.25f, 0.f,
@@ -82,8 +85,12 @@ audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
 	for (int i = 0; i < AUDIO_BUF_SAMPLES; i++) {
 		float mix = 0.f;
 
-		if (!audio_muted) {
-			if (bgm_enabled) {
+		if (!audio_muted && master_vol_pct > 0) {
+			float master_gain = (float)master_vol_pct / 100.f;
+			float music_gain  = master_gain * ((float)music_vol_pct / 100.f);
+			float sfx_gain    = master_gain * ((float)sfx_vol_pct / 100.f);
+
+			if (bgm_enabled && music_vol_pct > 0) {
 				float step_t = (float)bgm_sample_in_step / (float)samples_per_step;
 				float lf = BGM_LEAD[bgm_step];
 				if (lf > 0.f) {
@@ -91,7 +98,7 @@ audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
 					if (bgm_lead_phase >= 1.f) bgm_lead_phase -= 1.f;
 					float pulse = (bgm_lead_phase < 0.25f) ? 1.f : -1.f;
 					float env = 1.f - step_t * 0.7f;
-					mix += pulse * env * 0.075f;
+					mix += pulse * env * 0.075f * music_gain;
 				}
 
 				float bf = BGM_BASS[bgm_step];
@@ -100,13 +107,13 @@ audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
 					if (bgm_bass_phase >= 1.f) bgm_bass_phase -= 1.f;
 					float tri = 1.f - 4.f * absf(bgm_bass_phase - 0.5f);
 					float benv = 1.f - step_t * 0.45f;
-					mix += tri * benv * 0.095f;
+					mix += tri * benv * 0.095f * music_gain;
 				}
 
 				if ((bgm_step & 1) == 1 && step_t < 0.18f) {
 					audio_noise_rng = audio_noise_rng * 1664525u + 1013904223u;
 					float n = ((float)(audio_noise_rng & 0xFFFF) / 32768.f) - 1.f;
-					mix += n * (1.f - step_t / 0.18f) * 0.03f;
+					mix += n * (1.f - step_t / 0.18f) * 0.03f * music_gain;
 				}
 
 				bgm_sample_in_step++;
@@ -125,7 +132,7 @@ audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
 				if (sv->phase >= 1.f) sv->phase -= 1.f;
 				float sq = (sv->phase < 0.5f) ? 1.f : -1.f;
 				float env = 1.f - prog;
-				mix += sq * env * sv->volume;
+				mix += sq * env * sv->volume * sfx_gain;
 				sv->samples_left--;
 				if (sv->samples_left <= 0) sv->active = false;
 			}
@@ -182,6 +189,12 @@ play_tone(int freq_hz, int duration_ms, float volume, float freq_end_hz) {
 void set_bgm_enabled(bool enabled) { bgm_enabled = enabled; }
 void set_audio_muted(bool muted)  { audio_muted = muted; }
 bool is_audio_muted()             { return audio_muted; }
+void set_master_volume(int pct)   { master_vol_pct = clamp(0, pct, 100); }
+int  get_master_volume()          { return master_vol_pct; }
+void set_music_volume(int pct)    { music_vol_pct = clamp(0, pct, 100); }
+int  get_music_volume()           { return music_vol_pct; }
+void set_sfx_volume(int pct)      { sfx_vol_pct = clamp(0, pct, 100); }
+int  get_sfx_volume()             { return sfx_vol_pct; }
 void request_quit()               { running = false; }
 
 internal void

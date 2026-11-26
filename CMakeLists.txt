@@ -8,6 +8,7 @@ add_executable(ArcadeHub WIN32
     src/core/platform_win32.cpp
     src/core/renderer.cpp
     src/core/keybinds.cpp
+    src/core/audio_ui.cpp
     src/games/pong.cpp
     src/games/breaker.cpp
     src/hub.cpp

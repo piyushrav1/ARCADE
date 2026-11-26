@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "renderer.h"
 #include "keybinds.h"
+#include "audio_ui.h"
 #include "game_interface.h"
 
 #define pressed(b) (input->buttons[b].is_down && input->buttons[b].changed)
@@ -9,7 +10,8 @@
 enum Hub_State {
 	HUB_SPLASH,
 	HUB_MENU,
-	HUB_CONTROLS
+	HUB_CONTROLS,
+	HUB_SOUND
 };
 
 enum Active_Scene {
@@ -219,6 +221,16 @@ hub_update(Input* input, float dt, float fps) {
 		return;
 	}
 
+	// HUB_SOUND
+	if (hub_state == HUB_SOUND) {
+		if (update_and_draw_audio_ui(input,
+		                             th.bg_outer, th.panel_bg, th.panel_border,
+		                             th.card_bg, th.text, th.text_dim, th.accent)) {
+			hub_state = HUB_MENU;
+		}
+		return;
+	}
+
 	// HUB_MENU
 	if (pressed(BUTTON_ESC)) { request_quit(); return; }
 	if (vk_pressed(input, VK_TAB)) {
@@ -243,12 +255,14 @@ hub_update(Input* input, float dt, float fps) {
 
 	float mx = input->mouse_x;
 	float my = input->mouse_y;
-	bool hov_keys  = point_in_rect(mx, my, 16.f, 36.f, 11.f, 2.6f);
-	bool hov_theme = point_in_rect(mx, my, 40.f, 36.f, 11.f, 2.6f);
-	bool hov_music = point_in_rect(mx, my, 64.f, 36.f, 11.f, 2.6f);
+	bool hov_keys  = point_in_rect(mx, my, -5.f, 36.f, 10.f, 2.6f);
+	bool hov_sound = point_in_rect(mx, my, 18.f, 36.f, 10.f, 2.6f);
+	bool hov_theme = point_in_rect(mx, my, 41.f, 36.f, 10.f, 2.6f);
+	bool hov_music = point_in_rect(mx, my, 64.f, 36.f, 10.f, 2.6f);
 
 	if (pressed(BUTTON_MOUSE_LEFT)) {
 		if (hov_keys) { controls_tab = selected_idx; hub_state = HUB_CONTROLS; sfx(520, 40, 0.16f); return; }
+		else if (hov_sound) { hub_state = HUB_SOUND; sfx(520, 40, 0.16f); return; }
 		else if (hov_theme) { theme_idx = (theme_idx + 1) % 3; sfx(520, 35, 0.15f); }
 		else if (hov_music) { bgm_on = !bgm_on; set_bgm_enabled(bgm_on); sfx(520, 40, 0.16f); }
 	}
@@ -284,12 +298,13 @@ hub_update(Input* input, float dt, float fps) {
 	draw_text_left("ARCADE HUB", -74.f, 36.f, 0.85f, th.accent);
 	draw_rect(0.f, 29.5f, 74.f, 0.22f, th.panel_border);
 
-	draw_pill(16.f, 36.f, 11.f, 2.6f, "KEYS", th.card_bg, th.panel_border, th.text, hov_keys);
-	draw_pill(40.f, 36.f, 11.f, 2.6f, th.name, th.card_bg, th.panel_border, th.text, hov_theme);
+	draw_pill(-5.f, 36.f, 10.f, 2.6f, "KEYS",  th.card_bg, th.panel_border, th.text, hov_keys);
+	draw_pill(18.f, 36.f, 10.f, 2.6f, "SOUND", th.card_bg, th.panel_border, th.text, hov_sound);
+	draw_pill(41.f, 36.f, 10.f, 2.6f, th.name, th.card_bg, th.panel_border, th.text, hov_theme);
 	bool muted = is_audio_muted();
 	const char* music_lbl = muted ? "MUTED" : (bgm_on ? "MUSIC:ON" : "MUSIC:OFF");
 	u32 music_col = muted ? 0xEF4444 : (bgm_on ? 0x22C55E : th.text_dim);
-	draw_pill(64.f, 36.f, 11.f, 2.6f, music_lbl, th.card_bg, th.panel_border, music_col, hov_music);
+	draw_pill(64.f, 36.f, 10.f, 2.6f, music_lbl, th.card_bg, th.panel_border, music_col, hov_music);
 
 	for (int i = 0; i < NUM_GAMES; i++) {
 		float cy = 14.f - i * 16.5f;

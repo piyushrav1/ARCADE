@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "renderer.h"
 #include "keybinds.h"
+#include "audio_ui.h"
 #include "game_interface.h"
 
 #define is_down(b) input->buttons[b].is_down
@@ -12,6 +13,7 @@ namespace Pong {
 enum Game_State {
 	STATE_MENU,
 	STATE_CONTROLS,
+	STATE_SOUND,
 	STATE_PLAYING,
 	STATE_PAUSED,
 	STATE_GAME_OVER
@@ -443,36 +445,47 @@ update(Input* input, float dt, float fps) {
 		return GAME_CONTINUE;
 	}
 
+	if (game_state == STATE_SOUND) {
+		if (update_and_draw_audio_ui(input,
+		                             th.bg_outer, th.arena_bg, th.arena_border,
+		                             th.center_line, th.text, th.text_dim, th.accent)) {
+			game_state = controls_return_state;
+		}
+		return GAME_CONTINUE;
+	}
+
 	if (game_state == STATE_PAUSED) {
 		if (vk_pressed(input, pong_binds.pause) || pressed(BUTTON_P)) {
 			game_state = STATE_PLAYING;
 			sfx(520, 45, 0.15f);
 		}
 		if (pressed(BUTTON_UP) || pressed(BUTTON_W)) {
-			pause_selection = (pause_selection + 3) % 4;
+			pause_selection = (pause_selection + 4) % 5;
 			sfx(440, 35, 0.15f);
 		}
 		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) {
-			pause_selection = (pause_selection + 1) % 4;
+			pause_selection = (pause_selection + 1) % 5;
 			sfx(440, 35, 0.15f);
 		}
 		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
 			if (pause_selection == 0) game_state = STATE_PLAYING;
 			else if (pause_selection == 1) start_new_match();
 			else if (pause_selection == 2) { controls_return_state = STATE_PAUSED; game_state = STATE_CONTROLS; }
+			else if (pause_selection == 3) { controls_return_state = STATE_PAUSED; game_state = STATE_SOUND; }
 			else { game_state = STATE_MENU; pause_selection = 0; }
 			sfx(600, 60, 0.2f);
 		}
 
 		draw_arena_and_entities(true, fps);
 		draw_rect_alpha(0, 0, arena_half_size_x, arena_half_size_y, 0x050814, 0.72f);
-		draw_text_centered("PAUSED",    0.f,  22.f, 1.1f, th.accent);
-		draw_text_centered("RESUME",    0.f,   6.f, 0.60f, pause_selection == 0 ? th.p1 : th.text);
-		draw_text_centered("RESTART",   0.f,  -3.f, 0.60f, pause_selection == 1 ? th.p1 : th.text);
-		draw_text_centered("CONTROLS",  0.f, -12.f, 0.60f, pause_selection == 2 ? th.p1 : th.text);
-		draw_text_centered("MAIN MENU", 0.f, -21.f, 0.60f, pause_selection == 3 ? th.p2 : th.text);
-		float sel_y = 6.f - pause_selection * 9.f;
-		draw_text_centered(">", -28.f, sel_y, 0.60f, th.accent);
+		draw_text_centered("PAUSED",    0.f,  24.f, 1.05f, th.accent);
+		draw_text_centered("RESUME",    0.f,   9.f, 0.55f, pause_selection == 0 ? th.p1 : th.text);
+		draw_text_centered("RESTART",   0.f,   1.f, 0.55f, pause_selection == 1 ? th.p1 : th.text);
+		draw_text_centered("CONTROLS",  0.f,  -7.f, 0.55f, pause_selection == 2 ? th.p1 : th.text);
+		draw_text_centered("SOUND",     0.f, -15.f, 0.55f, pause_selection == 3 ? th.p1 : th.text);
+		draw_text_centered("MAIN MENU", 0.f, -23.f, 0.55f, pause_selection == 4 ? th.p2 : th.text);
+		float sel_y = 9.f - pause_selection * 8.f;
+		draw_text_centered(">", -28.f, sel_y, 0.55f, th.accent);
 		return GAME_CONTINUE;
 	}
 

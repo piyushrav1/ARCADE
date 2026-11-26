@@ -41,6 +41,12 @@ void play_tone(int freq_hz, int duration_ms, float volume = 0.25f, float freq_en
 void set_bgm_enabled(bool enabled);
 void set_audio_muted(bool muted);
 bool is_audio_muted();
+void set_master_volume(int pct);
+int  get_master_volume();
+void set_music_volume(int pct);
+int  get_music_volume();
+void set_sfx_volume(int pct);
+int  get_sfx_volume();
 void request_quit();
 
 void hub_init();
