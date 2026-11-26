@@ -19,7 +19,8 @@ enum Hub_State {
 enum Active_Scene {
 	SCENE_HUB,
 	SCENE_PONG,
-	SCENE_BREAKER
+	SCENE_BREAKER,
+	SCENE_SURVIVOR
 };
 
 struct Game_Info {
@@ -31,8 +32,9 @@ struct Game_Info {
 };
 
 global_variable const Game_Info GAMES[] = {
-	{ "PONG ARENA",   "CLASSIC PADDLE DUEL WITH POWERUPS",   "1P / 2P", 0x38BDF8, 0 },
-	{ "NEON BREAKER", "8 LEVELS - TNT - LASERS - MULTIBALL", "1P",      0x22D3EE, 1 },
+	{ "PONG ARENA",    "CLASSIC PADDLE DUEL WITH POWERUPS",   "1P / 2P", 0x38BDF8, 0 },
+	{ "NEON BREAKER",  "8 LEVELS - TNT - LASERS - MULTIBALL", "1P",      0x22D3EE, 1 },
+	{ "NEON SURVIVOR", "BULLET-HEAVEN - UPGRADES - BOSS",     "1P",      0xEC4899, 2 },
 };
 global_variable const int NUM_GAMES = (int)(sizeof(GAMES) / sizeof(GAMES[0]));
 
@@ -144,12 +146,19 @@ draw_game_icon(int id, float cx, float cy, u32 accent) {
 		draw_rect(cx - 4.0f, cy + bob * 0.6f, 0.65f, 2.1f, accent);
 		draw_rect(cx + 4.0f, cy - bob * 0.6f, 0.65f, 2.1f, 0xF59E0B);
 		draw_rect(cx + sinf(anim_time * 2.2f) * 2.0f, cy + bob, 0.75f, 0.75f, 0xF8FAFC);
-	} else {
+	} else if (id == 1) {
 		draw_rect(cx - 2.4f, cy + 2.6f, 1.9f, 0.8f, accent);
 		draw_rect(cx + 2.4f, cy + 2.6f, 1.9f, 0.8f, 0xA855F7);
 		draw_rect(cx,        cy + 0.6f, 1.9f, 0.8f, 0xEF4444);
 		draw_rect(cx, cy - 3.6f, 2.9f, 0.6f, accent);
 		draw_rect(cx + sinf(anim_time * 2.5f) * 1.5f, cy - 1.5f, 0.7f, 0.7f, 0xF8FAFC);
+	} else {
+		// Orbiting blades + core icon
+		draw_rect(cx, cy, 1.4f, 1.4f, 0xF8FAFC);
+		float a1 = anim_time * 4.0f;
+		float a2 = a1 + 3.14159f;
+		draw_rect(cx + cosf(a1) * 3.4f, cy + sinf(a1) * 3.4f, 1.0f, 1.0f, accent);
+		draw_rect(cx + cosf(a2) * 3.4f, cy + sinf(a2) * 3.4f, 1.0f, 1.0f, 0xFACC15);
 	}
 }
 
@@ -202,9 +211,12 @@ launch_selected_game() {
 	if (GAMES[selected_idx].id == 0) {
 		Pong::init();
 		active_scene = SCENE_PONG;
-	} else {
+	} else if (GAMES[selected_idx].id == 1) {
 		Breaker::init();
 		active_scene = SCENE_BREAKER;
+	} else {
+		Survivor::init();
+		active_scene = SCENE_SURVIVOR;
 	}
 }
 
@@ -276,6 +288,15 @@ hub_update(Input* input, float dt, float fps) {
 	}
 	if (active_scene == SCENE_BREAKER) {
 		if (Breaker::update(input, dt) == GAME_EXIT_TO_HUB) {
+			active_scene = SCENE_HUB;
+			set_cursor_visible(true);
+			set_bgm_enabled(user_stats.hub_bgm_on);
+			sfx(520, 60, 0.18f);
+		}
+		return;
+	}
+	if (active_scene == SCENE_SURVIVOR) {
+		if (Survivor::update(input, dt) == GAME_EXIT_TO_HUB) {
 			active_scene = SCENE_HUB;
 			set_cursor_visible(true);
 			set_bgm_enabled(user_stats.hub_bgm_on);
@@ -481,8 +502,8 @@ hub_update(Input* input, float dt, float fps) {
 	}
 
 	for (int i = 0; i < NUM_GAMES; i++) {
-		float cy = 7.f - i * 18.5f;
-		if (point_in_rect(mx, my, 0.f, cy, 74.f, 7.0f)) {
+		float cy = 10.f - i * 16.5f;
+		if (point_in_rect(mx, my, 0.f, cy, 74.f, 6.4f)) {
 			if (input->mouse_moved && selected_idx != i) {
 				selected_idx = i;
 				sfx(440, 28, 0.12f);
@@ -503,24 +524,24 @@ hub_update(Input* input, float dt, float fps) {
 	draw_hub_backdrop(th, hov_prof, hov_set);
 
 	for (int i = 0; i < NUM_GAMES; i++) {
-		float cy = 7.f - i * 18.5f;
+		float cy = 10.f - i * 16.5f;
 		const Game_Info& g = GAMES[i];
 		bool is_sel = (i == selected_idx);
 
-		draw_rect(0.f, cy, 74.6f, 7.2f, is_sel ? th.accent : th.panel_border);
-		draw_rect(0.f, cy, 74.0f, 6.6f, is_sel ? th.card_selected : th.card_bg);
+		draw_rect(0.f, cy, 74.6f, 6.6f, is_sel ? th.accent : th.panel_border);
+		draw_rect(0.f, cy, 74.0f, 6.0f, is_sel ? th.card_selected : th.card_bg);
 
 		if (is_sel) {
 			float pulse = 0.5f * sinf(anim_time * 6.f);
-			draw_text_centered(">", -78.f + pulse, cy, 0.60f, th.accent);
+			draw_text_centered(">", -78.f + pulse, cy, 0.58f, th.accent);
 		}
 
 		draw_game_icon(g.id, -63.f, cy, g.accent);
-		draw_text_left(g.title, -51.f, cy + 2.3f, 0.55f, is_sel ? th.text : th.text_dim);
-		draw_text_left(g.subtitle, -51.f, cy - 2.3f, 0.30f, th.text_dim);
+		draw_text_left(g.title, -51.f, cy + 2.1f, 0.52f, is_sel ? th.text : th.text_dim);
+		draw_text_left(g.subtitle, -51.f, cy - 2.1f, 0.29f, th.text_dim);
 
-		draw_text_centered(g.players, 42.f, cy + 2.0f, 0.34f, th.text_dim);
-		draw_text_centered(is_sel ? "PLAY" : "READY", 62.f, cy - 2.0f, 0.38f, is_sel ? th.accent : 0x22C55E);
+		draw_text_centered(g.players, 42.f, cy + 1.9f, 0.32f, th.text_dim);
+		draw_text_centered(is_sel ? "PLAY" : "READY", 62.f, cy - 1.9f, 0.36f, is_sel ? th.accent : 0x22C55E);
 	}
 
 	draw_text_centered("ENTER/CLICK: PLAY   S/TAB: SETTINGS   F2: PROFILE   M: MUTE   ESC: QUIT",

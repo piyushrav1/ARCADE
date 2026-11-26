@@ -36,13 +36,14 @@ update_and_draw_settings_ui(Input* input, int context,
                             u32 text, u32 text_dim, u32 accent) {
 	if (context == 0) ctrl_game_tab = 0;
 	else if (context == 1) ctrl_game_tab = 1;
+	else if (context == 2) ctrl_game_tab = 2;
 
-	const int num_ctrl_binds = (ctrl_game_tab == 0) ? 5 : 4;
+	const int num_ctrl_binds = (ctrl_game_tab == 0) ? 5 : (ctrl_game_tab == 1 ? 4 : 6);
 	int total_rows = 7;
-	if (set_tab == SET_AUDIO)         total_rows = 7; // Master, Music, SFX, Mute, Hub BGM, Reset, Back
-	else if (set_tab == SET_GRAPHICS) total_rows = 5; // Display, Size, Scanlines, Reset, Back
-	else if (set_tab == SET_THEME)    total_rows = 3; // Theme, Reset, Back
-	else                              total_rows = num_ctrl_binds + 3; // Binds + Mouse + Reset + Back
+	if (set_tab == SET_AUDIO)         total_rows = 7;
+	else if (set_tab == SET_GRAPHICS) total_rows = 5;
+	else if (set_tab == SET_THEME)    total_rows = 3;
+	else                              total_rows = num_ctrl_binds + 3;
 
 	if (set_row >= total_rows) set_row = total_rows - 1;
 
@@ -53,18 +54,25 @@ update_and_draw_settings_ui(Input* input, int context,
 				ctrl_listening = false;
 				play_tone(320, 40, 0.14f);
 			} else if (set_tab == SET_CONTROLS && set_row < num_ctrl_binds) {
-				int* bind_ptrs[5] = {};
+				int* bind_ptrs[6] = {};
 				if (ctrl_game_tab == 0) {
 					bind_ptrs[0] = &pong_binds.p1_up;
 					bind_ptrs[1] = &pong_binds.p1_down;
 					bind_ptrs[2] = &pong_binds.p2_up;
 					bind_ptrs[3] = &pong_binds.p2_down;
 					bind_ptrs[4] = &pong_binds.pause;
-				} else {
+				} else if (ctrl_game_tab == 1) {
 					bind_ptrs[0] = &breaker_binds.left;
 					bind_ptrs[1] = &breaker_binds.right;
 					bind_ptrs[2] = &breaker_binds.action;
 					bind_ptrs[3] = &breaker_binds.pause;
+				} else {
+					bind_ptrs[0] = &survivor_binds.up;
+					bind_ptrs[1] = &survivor_binds.down;
+					bind_ptrs[2] = &survivor_binds.left;
+					bind_ptrs[3] = &survivor_binds.right;
+					bind_ptrs[4] = &survivor_binds.dash;
+					bind_ptrs[5] = &survivor_binds.pause;
 				}
 				*bind_ptrs[set_row] = k;
 				ctrl_listening = false;
@@ -121,13 +129,14 @@ update_and_draw_settings_ui(Input* input, int context,
 				}
 			}
 			if (set_tab == SET_CONTROLS && context < 0) {
-				if (in_rect(mx, my, -22.f, 19.5f, 18.f, 2.4f)) { ctrl_game_tab = 0; set_row = 0; play_tone(500, 30, 0.14f); return false; }
-				if (in_rect(mx, my,  22.f, 19.5f, 18.f, 2.4f)) { ctrl_game_tab = 1; set_row = 0; play_tone(500, 30, 0.14f); return false; }
+				if (in_rect(mx, my, -42.f, 19.5f, 18.f, 2.4f)) { ctrl_game_tab = 0; set_row = 0; play_tone(500, 30, 0.14f); return false; }
+				if (in_rect(mx, my,   0.f, 19.5f, 18.f, 2.4f)) { ctrl_game_tab = 1; set_row = 0; play_tone(500, 30, 0.14f); return false; }
+				if (in_rect(mx, my,  42.f, 19.5f, 18.f, 2.4f)) { ctrl_game_tab = 2; set_row = 0; play_tone(500, 30, 0.14f); return false; }
 			}
 		}
 
-		float list_top = (set_tab == SET_CONTROLS && context < 0) ? 12.5f : 16.5f;
-		float list_step = (set_tab == SET_CONTROLS) ? 6.5f : 7.5f;
+		float list_top = (set_tab == SET_CONTROLS && context < 0) ? 13.0f : 16.5f;
+		float list_step = (set_tab == SET_CONTROLS) ? 5.6f : 7.5f;
 
 		for (int i = 0; i < total_rows; i++) {
 			float ry = list_top - i * list_step;
@@ -193,8 +202,9 @@ update_and_draw_settings_ui(Input* input, int context,
 					if (context < 0) {
 						user_stats.hub_theme = (user_stats.hub_theme + (dir < 0 ? 2 : 1)) % 3;
 					} else {
-						int* ptr = (context == 0) ? &user_stats.pong_theme : &user_stats.breaker_theme;
-						int cur = *ptr + 1; // 0..3
+						int* ptr = (context == 0) ? &user_stats.pong_theme :
+						           (context == 1 ? &user_stats.breaker_theme : &user_stats.survivor_theme);
+						int cur = *ptr + 1;
 						cur = (cur + (dir < 0 ? 3 : 1)) % 4;
 						*ptr = cur - 1;
 					}
@@ -202,7 +212,8 @@ update_and_draw_settings_ui(Input* input, int context,
 				} else if (set_row == 1 && activate) {
 					if (context < 0) user_stats.hub_theme = 0;
 					else if (context == 0) user_stats.pong_theme = -1;
-					else user_stats.breaker_theme = -1;
+					else if (context == 1) user_stats.breaker_theme = -1;
+					else user_stats.survivor_theme = -1;
 					play_tone(600, 50, 0.16f);
 				} else if (set_row == 2 && activate) {
 					set_row = 0; save_user_data(); play_tone(400, 40, 0.14f); return true;
@@ -212,10 +223,11 @@ update_and_draw_settings_ui(Input* input, int context,
 			if (dir != 0) {
 				if (set_row == num_ctrl_binds) {
 					if (ctrl_game_tab == 0) pong_binds.mouse_1p = !pong_binds.mouse_1p;
-					else                    breaker_binds.mouse_aim = !breaker_binds.mouse_aim;
+					else if (ctrl_game_tab == 1) breaker_binds.mouse_aim = !breaker_binds.mouse_aim;
+					else survivor_binds.mouse_move = !survivor_binds.mouse_move;
 					play_tone(520, 40, 0.15f);
 				} else if (context < 0) {
-					ctrl_game_tab = 1 - ctrl_game_tab;
+					ctrl_game_tab = (ctrl_game_tab + (dir < 0 ? 2 : 1)) % 3;
 					set_row = 0;
 					play_tone(520, 35, 0.14f);
 					return false;
@@ -227,11 +239,13 @@ update_and_draw_settings_ui(Input* input, int context,
 					play_tone(580, 40, 0.15f);
 				} else if (set_row == num_ctrl_binds) {
 					if (ctrl_game_tab == 0) pong_binds.mouse_1p = !pong_binds.mouse_1p;
-					else                    breaker_binds.mouse_aim = !breaker_binds.mouse_aim;
+					else if (ctrl_game_tab == 1) breaker_binds.mouse_aim = !breaker_binds.mouse_aim;
+					else survivor_binds.mouse_move = !survivor_binds.mouse_move;
 					play_tone(520, 40, 0.15f);
 				} else if (set_row == num_ctrl_binds + 1) {
 					if (ctrl_game_tab == 0) reset_pong_binds();
-					else                    reset_breaker_binds();
+					else if (ctrl_game_tab == 1) reset_breaker_binds();
+					else reset_survivor_binds();
 					play_tone(620, 60, 0.18f);
 				} else {
 					set_row = 0; save_user_data(); play_tone(400, 40, 0.14f); return true;
@@ -256,17 +270,21 @@ update_and_draw_settings_ui(Input* input, int context,
 		draw_text_centered(TAB_NAMES[t], tx, 26.5f, 0.33f, active ? text : text_dim);
 	}
 
-	float list_top = (set_tab == SET_CONTROLS && context < 0) ? 12.5f : 16.5f;
-	float list_step = (set_tab == SET_CONTROLS) ? 6.5f : 7.5f;
+	float list_top = (set_tab == SET_CONTROLS && context < 0) ? 13.0f : 16.5f;
+	float list_step = (set_tab == SET_CONTROLS) ? 5.6f : 7.5f;
 
 	if (set_tab == SET_CONTROLS && context < 0) {
-		draw_rect(-22.f, 19.5f, 18.4f, 2.4f, ctrl_game_tab == 0 ? accent : border);
-		draw_rect(-22.f, 19.5f, 18.0f, 2.0f, card_bg);
-		draw_text_centered("PONG ARENA", -22.f, 19.5f, 0.30f, ctrl_game_tab == 0 ? text : text_dim);
+		draw_rect(-42.f, 19.5f, 18.4f, 2.4f, ctrl_game_tab == 0 ? accent : border);
+		draw_rect(-42.f, 19.5f, 18.0f, 2.0f, card_bg);
+		draw_text_centered("PONG ARENA", -42.f, 19.5f, 0.28f, ctrl_game_tab == 0 ? text : text_dim);
 
-		draw_rect(22.f, 19.5f, 18.4f, 2.4f, ctrl_game_tab == 1 ? accent : border);
-		draw_rect(22.f, 19.5f, 18.0f, 2.0f, card_bg);
-		draw_text_centered("NEON BREAKER", 22.f, 19.5f, 0.30f, ctrl_game_tab == 1 ? text : text_dim);
+		draw_rect(0.f, 19.5f, 18.4f, 2.4f, ctrl_game_tab == 1 ? accent : border);
+		draw_rect(0.f, 19.5f, 18.0f, 2.0f, card_bg);
+		draw_text_centered("NEON BREAKER", 0.f, 19.5f, 0.28f, ctrl_game_tab == 1 ? text : text_dim);
+
+		draw_rect(42.f, 19.5f, 18.4f, 2.4f, ctrl_game_tab == 2 ? accent : border);
+		draw_rect(42.f, 19.5f, 18.0f, 2.0f, card_bg);
+		draw_text_centered("NEON SURVIVOR", 42.f, 19.5f, 0.28f, ctrl_game_tab == 2 ? text : text_dim);
 	}
 
 	for (int i = 0; i < total_rows; i++) {
@@ -317,7 +335,8 @@ update_and_draw_settings_ui(Input* input, int context,
 		} else if (set_tab == SET_THEME) {
 			if (i == 0) {
 				int val = (context < 0) ? user_stats.hub_theme :
-				          (context == 0 ? user_stats.pong_theme : user_stats.breaker_theme);
+				          (context == 0 ? user_stats.pong_theme :
+				          (context == 1 ? user_stats.breaker_theme : user_stats.survivor_theme));
 				const char* tname = (val < 0) ? "FOLLOW HUB" : THEMES[val].name;
 				draw_text_left(context < 0 ? "GLOBAL THEME" : "GAME THEME", -60.f, ry, 0.34f, sel ? text : text_dim);
 				draw_text_centered(tname, 40.f, ry, 0.34f, accent);
@@ -327,32 +346,42 @@ update_and_draw_settings_ui(Input* input, int context,
 				draw_text_centered("BACK", 0.f, ry, 0.34f, sel ? accent : text);
 			}
 		} else {
-			const char* clabels[5] = {};
-			int cvals[5] = {};
+			const char* clabels[6] = {};
+			int cvals[6] = {};
 			if (ctrl_game_tab == 0) {
 				clabels[0] = "P1 MOVE UP";   cvals[0] = pong_binds.p1_up;
 				clabels[1] = "P1 MOVE DOWN"; cvals[1] = pong_binds.p1_down;
 				clabels[2] = "P2 MOVE UP";   cvals[2] = pong_binds.p2_up;
 				clabels[3] = "P2 MOVE DOWN"; cvals[3] = pong_binds.p2_down;
 				clabels[4] = "PAUSE";        cvals[4] = pong_binds.pause;
-			} else {
+			} else if (ctrl_game_tab == 1) {
 				clabels[0] = "MOVE LEFT";      cvals[0] = breaker_binds.left;
 				clabels[1] = "MOVE RIGHT";     cvals[1] = breaker_binds.right;
 				clabels[2] = "LAUNCH / LASER"; cvals[2] = breaker_binds.action;
 				clabels[3] = "PAUSE";          cvals[3] = breaker_binds.pause;
+			} else {
+				clabels[0] = "MOVE UP";    cvals[0] = survivor_binds.up;
+				clabels[1] = "MOVE DOWN";  cvals[1] = survivor_binds.down;
+				clabels[2] = "MOVE LEFT";  cvals[2] = survivor_binds.left;
+				clabels[3] = "MOVE RIGHT"; cvals[3] = survivor_binds.right;
+				clabels[4] = "DASH";       cvals[4] = survivor_binds.dash;
+				clabels[5] = "PAUSE";      cvals[5] = survivor_binds.pause;
 			}
 			if (i < num_ctrl_binds) {
-				draw_text_left(clabels[i], -60.f, ry, 0.33f, sel ? text : text_dim);
+				draw_text_left(clabels[i], -60.f, ry, 0.31f, sel ? text : text_dim);
 				draw_text_centered(listening ? "PRESS ANY KEY..." : vk_name(cvals[i]),
-				                   40.f, ry, 0.33f, listening ? 0xFACC15 : accent);
+				                   40.f, ry, 0.31f, listening ? 0xFACC15 : accent);
 			} else if (i == num_ctrl_binds) {
-				bool m_on = (ctrl_game_tab == 0) ? pong_binds.mouse_1p : breaker_binds.mouse_aim;
-				draw_text_left(ctrl_game_tab == 0 ? "MOUSE 1P CONTROL" : "MOUSE AIM CONTROL", -60.f, ry, 0.33f, sel ? text : text_dim);
-				draw_text_centered(m_on ? "ON" : "OFF", 40.f, ry, 0.33f, m_on ? 0x22C55E : text_dim);
+				bool m_on = (ctrl_game_tab == 0) ? pong_binds.mouse_1p :
+				            (ctrl_game_tab == 1 ? breaker_binds.mouse_aim : survivor_binds.mouse_move);
+				const char* mlbl = (ctrl_game_tab == 0) ? "MOUSE 1P CONTROL" :
+				                   (ctrl_game_tab == 1 ? "MOUSE AIM CONTROL" : "MOUSE FOLLOW MOVE");
+				draw_text_left(mlbl, -60.f, ry, 0.31f, sel ? text : text_dim);
+				draw_text_centered(m_on ? "ON" : "OFF", 40.f, ry, 0.31f, m_on ? 0x22C55E : text_dim);
 			} else if (i == num_ctrl_binds + 1) {
-				draw_text_centered("RESET DEFAULTS", 0.f, ry, 0.33f, sel ? 0xF59E0B : text_dim);
+				draw_text_centered("RESET DEFAULTS", 0.f, ry, 0.31f, sel ? 0xF59E0B : text_dim);
 			} else {
-				draw_text_centered("BACK", 0.f, ry, 0.33f, sel ? accent : text);
+				draw_text_centered("BACK", 0.f, ry, 0.31f, sel ? accent : text);
 			}
 		}
 	}

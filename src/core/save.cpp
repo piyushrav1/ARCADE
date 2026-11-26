@@ -5,7 +5,7 @@
 #include "keybinds.h"
 #include "utils.h"
 
-User_Stats user_stats = { 0, -1, -1, true, "PLAYER 1", 0, false, 0, 0, 0, 0 };
+User_Stats user_stats = { 0, -1, -1, -1, true, "PLAYER 1", 0, false, 0, 0, 0, 0, 0, 0 };
 
 internal bool
 get_save_path(char* out_path, int max_len, bool create_dir) {
@@ -80,6 +80,7 @@ load_user_data() {
 		if (str_eq(k, "hub_theme"))              user_stats.hub_theme = clamp(0, v, 2);
 		else if (str_eq(k, "pong_theme"))        user_stats.pong_theme = clamp(-1, v, 2);
 		else if (str_eq(k, "breaker_theme"))     user_stats.breaker_theme = clamp(-1, v, 2);
+		else if (str_eq(k, "survivor_theme"))    user_stats.survivor_theme = clamp(-1, v, 2);
 		else if (str_eq(k, "gfx_fullscreen"))    set_fullscreen(v != 0);
 		else if (str_eq(k, "gfx_res_idx"))       set_windowed_res(v);
 		else if (str_eq(k, "gfx_scanlines"))     set_crt_scanlines(v != 0);
@@ -104,10 +105,19 @@ load_user_data() {
 		else if (str_eq(k, "brk_action"))        breaker_binds.action = clamp(1, v, 255);
 		else if (str_eq(k, "brk_pause"))         breaker_binds.pause = clamp(1, v, 255);
 		else if (str_eq(k, "brk_mouse"))         breaker_binds.mouse_aim = (v != 0);
+		else if (str_eq(k, "surv_up"))           survivor_binds.up = clamp(1, v, 255);
+		else if (str_eq(k, "surv_down"))         survivor_binds.down = clamp(1, v, 255);
+		else if (str_eq(k, "surv_left"))         survivor_binds.left = clamp(1, v, 255);
+		else if (str_eq(k, "surv_right"))        survivor_binds.right = clamp(1, v, 255);
+		else if (str_eq(k, "surv_dash"))         survivor_binds.dash = clamp(1, v, 255);
+		else if (str_eq(k, "surv_pause"))        survivor_binds.pause = clamp(1, v, 255);
+		else if (str_eq(k, "surv_mouse"))        survivor_binds.mouse_move = (v != 0);
 		else if (str_eq(k, "pong_best_rally"))   user_stats.pong_best_rally = clamp(0, v, 99999);
 		else if (str_eq(k, "pong_wins"))         user_stats.pong_wins = clamp(0, v, 99999);
 		else if (str_eq(k, "brk_high_score"))    user_stats.breaker_high_score = clamp(0, v, 9999999);
 		else if (str_eq(k, "brk_unlocked_lvl"))  user_stats.breaker_unlocked_level = clamp(0, v, 7);
+		else if (str_eq(k, "surv_high_score"))   user_stats.survivor_high_score = clamp(0, v, 9999999);
+		else if (str_eq(k, "surv_best_wave"))    user_stats.survivor_best_wave = clamp(0, v, 5);
 	}
 	fclose(f);
 }
@@ -123,6 +133,7 @@ save_user_data() {
 	fprintf(f, "hub_theme=%d\n", user_stats.hub_theme);
 	fprintf(f, "pong_theme=%d\n", user_stats.pong_theme);
 	fprintf(f, "breaker_theme=%d\n", user_stats.breaker_theme);
+	fprintf(f, "survivor_theme=%d\n", user_stats.survivor_theme);
 	fprintf(f, "gfx_fullscreen=%d\n", is_fullscreen() ? 1 : 0);
 	fprintf(f, "gfx_res_idx=%d\n", get_windowed_res());
 	fprintf(f, "gfx_scanlines=%d\n", is_crt_scanlines() ? 1 : 0);
@@ -145,10 +156,19 @@ save_user_data() {
 	fprintf(f, "brk_action=%d\n", breaker_binds.action);
 	fprintf(f, "brk_pause=%d\n", breaker_binds.pause);
 	fprintf(f, "brk_mouse=%d\n", breaker_binds.mouse_aim ? 1 : 0);
+	fprintf(f, "surv_up=%d\n", survivor_binds.up);
+	fprintf(f, "surv_down=%d\n", survivor_binds.down);
+	fprintf(f, "surv_left=%d\n", survivor_binds.left);
+	fprintf(f, "surv_right=%d\n", survivor_binds.right);
+	fprintf(f, "surv_dash=%d\n", survivor_binds.dash);
+	fprintf(f, "surv_pause=%d\n", survivor_binds.pause);
+	fprintf(f, "surv_mouse=%d\n", survivor_binds.mouse_move ? 1 : 0);
 	fprintf(f, "pong_best_rally=%d\n", user_stats.pong_best_rally);
 	fprintf(f, "pong_wins=%d\n", user_stats.pong_wins);
 	fprintf(f, "brk_high_score=%d\n", user_stats.breaker_high_score);
 	fprintf(f, "brk_unlocked_lvl=%d\n", user_stats.breaker_unlocked_level);
+	fprintf(f, "surv_high_score=%d\n", user_stats.survivor_high_score);
+	fprintf(f, "surv_best_wave=%d\n", user_stats.survivor_best_wave);
 
 	fclose(f);
 }

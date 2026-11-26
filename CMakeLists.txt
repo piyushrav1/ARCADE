@@ -12,6 +12,7 @@ add_executable(ArcadeHub WIN32
     src/core/save.cpp
     src/games/pong.cpp
     src/games/breaker.cpp
+    src/games/survivor.cpp
     src/hub.cpp
 )
 

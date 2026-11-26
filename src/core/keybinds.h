@@ -20,8 +20,19 @@ struct Breaker_Binds {
 	bool mouse_aim;
 };
 
+struct Survivor_Binds {
+	int up;
+	int down;
+	int left;
+	int right;
+	int dash;
+	int pause;
+	bool mouse_move;
+};
+
 extern Pong_Binds pong_binds;
 extern Breaker_Binds breaker_binds;
+extern Survivor_Binds survivor_binds;
 
 inline bool vk_down(const Input* in, int vk) {
 	return (vk > 0 && vk < 256) ? in->keys_down[vk] : false;
@@ -33,4 +44,5 @@ inline bool vk_pressed(const Input* in, int vk) {
 
 void reset_pong_binds();
 void reset_breaker_binds();
+void reset_survivor_binds();
 const char* vk_name(int vk);

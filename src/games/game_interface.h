@@ -17,3 +17,7 @@ namespace Breaker {
 	Game_Result update(Input* input, float dt);
 }
 
+namespace Survivor {
+	void init();
+	Game_Result update(Input* input, float dt);
+}

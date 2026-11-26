@@ -2,6 +2,7 @@
 
 Pong_Binds pong_binds = { 'W', 'S', VK_UP, VK_DOWN, VK_ESCAPE, true };
 Breaker_Binds breaker_binds = { 'A', 'D', VK_SPACE, VK_ESCAPE, true };
+Survivor_Binds survivor_binds = { 'W', 'S', 'A', 'D', VK_SPACE, VK_ESCAPE, false };
 
 void
 reset_pong_binds() {
@@ -11,6 +12,11 @@ reset_pong_binds() {
 void
 reset_breaker_binds() {
 	breaker_binds = { 'A', 'D', VK_SPACE, VK_ESCAPE, true };
+}
+
+void
+reset_survivor_binds() {
+	survivor_binds = { 'W', 'S', 'A', 'D', VK_SPACE, VK_ESCAPE, false };
 }
 
 const char*
