@@ -3,6 +3,8 @@
 #include "renderer.h"
 #include "keybinds.h"
 #include "audio_ui.h"
+#include "graphics_ui.h"
+#include "themes.h"
 #include "save.h"
 #include "game_interface.h"
 
@@ -13,7 +15,8 @@ enum Hub_State {
 	HUB_PROFILE,
 	HUB_MENU,
 	HUB_CONTROLS,
-	HUB_SOUND
+	HUB_SOUND,
+	HUB_GRAPHICS
 };
 
 enum Active_Scene {
@@ -35,24 +38,6 @@ global_variable const Game_Info GAMES[] = {
 	{ "NEON BREAKER", "8 LEVELS - TNT - LASERS - MULTIBALL", "1P",      0x22D3EE, 1 },
 };
 global_variable const int NUM_GAMES = (int)(sizeof(GAMES) / sizeof(GAMES[0]));
-
-struct Theme {
-	const char* name;
-	u32 bg_outer;
-	u32 panel_bg;
-	u32 panel_border;
-	u32 card_bg;
-	u32 card_selected;
-	u32 text;
-	u32 text_dim;
-	u32 accent;
-};
-
-global_variable const Theme THEMES[3] = {
-	{ "CYBER",     0x0B1120, 0x0F172A, 0x334155, 0x162033, 0x1E293B, 0xF1F5F9, 0x64748B, 0x22D3EE },
-	{ "CRT",       0x020802, 0x051405, 0x166534, 0x082008, 0x14532D, 0xBBF7D0, 0x22C55E, 0x4ADE80 },
-	{ "SYNTHWAVE", 0x120624, 0x1E0B36, 0x7E22CE, 0x2A104B, 0x4C1D95, 0xFAE8FF, 0xA855F7, 0xF472B6 },
-};
 
 global_variable const char* AVATAR_NAMES[6] = {
 	"VISOR", "BOT", "ACE", "PHANTOM", "NINJA", "CHAMP"
@@ -285,6 +270,7 @@ hub_update(Input* input, float dt, float fps) {
 	if (active_scene == SCENE_PONG) {
 		if (Pong::update(input, dt, fps) == GAME_EXIT_TO_HUB) {
 			active_scene = SCENE_HUB;
+			set_cursor_visible(true);
 			set_bgm_enabled(bgm_on);
 			sfx(520, 60, 0.18f);
 		}
@@ -293,11 +279,14 @@ hub_update(Input* input, float dt, float fps) {
 	if (active_scene == SCENE_BREAKER) {
 		if (Breaker::update(input, dt) == GAME_EXIT_TO_HUB) {
 			active_scene = SCENE_HUB;
+			set_cursor_visible(true);
 			set_bgm_enabled(bgm_on);
 			sfx(520, 60, 0.18f);
 		}
 		return;
 	}
+
+	set_cursor_visible(true);
 
 	anim_time += dt;
 	for (int i = 0; i < HUB_MAX_STARS; i++) {
@@ -491,6 +480,17 @@ hub_update(Input* input, float dt, float fps) {
 		return;
 	}
 
+	// HUB_GRAPHICS
+	if (hub_state == HUB_GRAPHICS) {
+		if (update_and_draw_graphics_ui(input,
+		                                th.bg_outer, th.panel_bg, th.panel_border,
+		                                th.card_bg, th.text, th.text_dim, th.accent)) {
+			save_user_data();
+			hub_state = HUB_MENU;
+		}
+		return;
+	}
+
 	// HUB_MENU
 	if (pressed(BUTTON_ESC)) { request_quit(); return; }
 	if (vk_pressed(input, VK_F2)) { open_profile_editor(); sfx(520, 40, 0.16f); return; }
@@ -520,14 +520,16 @@ hub_update(Input* input, float dt, float fps) {
 	float mx = input->mouse_x;
 	float my = input->mouse_y;
 	bool hov_prof  = point_in_rect(mx, my, -56.f, 25.5f, 20.f, 3.2f);
-	bool hov_keys  = point_in_rect(mx, my, -5.f, 36.f, 10.f, 2.6f);
-	bool hov_sound = point_in_rect(mx, my, 18.f, 36.f, 10.f, 2.6f);
-	bool hov_theme = point_in_rect(mx, my, 41.f, 36.f, 10.f, 2.6f);
-	bool hov_music = point_in_rect(mx, my, 64.f, 36.f, 10.f, 2.6f);
+	bool hov_keys  = point_in_rect(mx, my, -18.f, 36.f, 9.0f, 2.6f);
+	bool hov_gfx   = point_in_rect(mx, my,   3.f, 36.f, 9.0f, 2.6f);
+	bool hov_sound = point_in_rect(mx, my,  24.f, 36.f, 9.0f, 2.6f);
+	bool hov_theme = point_in_rect(mx, my,  45.f, 36.f, 9.0f, 2.6f);
+	bool hov_music = point_in_rect(mx, my,  66.f, 36.f, 9.0f, 2.6f);
 
 	if (pressed(BUTTON_MOUSE_LEFT)) {
 		if (hov_prof)       { open_profile_editor(); sfx(520, 40, 0.16f); return; }
 		else if (hov_keys)  { controls_tab = selected_idx; hub_state = HUB_CONTROLS; sfx(520, 40, 0.16f); return; }
+		else if (hov_gfx)   { hub_state = HUB_GRAPHICS; sfx(520, 40, 0.16f); return; }
 		else if (hov_sound) { hub_state = HUB_SOUND; sfx(520, 40, 0.16f); return; }
 		else if (hov_theme) { theme_idx = (theme_idx + 1) % 3; user_stats.hub_theme = theme_idx; save_user_data(); sfx(520, 35, 0.15f); }
 		else if (hov_music) { bgm_on = !bgm_on; user_stats.hub_bgm_on = bgm_on; set_bgm_enabled(bgm_on); save_user_data(); sfx(520, 40, 0.16f); }
@@ -555,13 +557,14 @@ hub_update(Input* input, float dt, float fps) {
 
 	draw_hub_backdrop(th);
 
-	draw_pill(-5.f, 36.f, 10.f, 2.6f, "KEYS",  th.card_bg, th.panel_border, th.text, hov_keys);
-	draw_pill(18.f, 36.f, 10.f, 2.6f, "SOUND", th.card_bg, th.panel_border, th.text, hov_sound);
-	draw_pill(41.f, 36.f, 10.f, 2.6f, th.name, th.card_bg, th.panel_border, th.text, hov_theme);
+	draw_pill(-18.f, 36.f, 9.0f, 2.6f, "KEYS",  th.card_bg, th.panel_border, th.text, hov_keys);
+	draw_pill(  3.f, 36.f, 9.0f, 2.6f, "GFX",   th.card_bg, th.panel_border, th.text, hov_gfx);
+	draw_pill( 24.f, 36.f, 9.0f, 2.6f, "SOUND", th.card_bg, th.panel_border, th.text, hov_sound);
+	draw_pill( 45.f, 36.f, 9.0f, 2.6f, th.name, th.card_bg, th.panel_border, th.text, hov_theme);
 	bool muted = is_audio_muted();
-	const char* music_lbl = muted ? "MUTED" : (bgm_on ? "MUSIC:ON" : "MUSIC:OFF");
+	const char* music_lbl = muted ? "MUTED" : (bgm_on ? "BGM:ON" : "BGM:OFF");
 	u32 music_col = muted ? 0xEF4444 : (bgm_on ? 0x22C55E : th.text_dim);
-	draw_pill(64.f, 36.f, 10.f, 2.6f, music_lbl, th.card_bg, th.panel_border, music_col, hov_music);
+	draw_pill( 66.f, 36.f, 9.0f, 2.6f, music_lbl, th.card_bg, th.panel_border, music_col, hov_music);
 
 	for (int i = 0; i < NUM_GAMES; i++) {
 		float cy = 10.f - i * 16.5f;

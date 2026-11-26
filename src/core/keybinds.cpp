@@ -1,12 +1,12 @@
 #include "keybinds.h"
 #include "renderer.h"
 
-Pong_Binds pong_binds = { 'W', 'S', VK_UP, VK_DOWN, VK_ESCAPE, false };
+Pong_Binds pong_binds = { 'W', 'S', VK_UP, VK_DOWN, VK_ESCAPE, true };
 Breaker_Binds breaker_binds = { 'A', 'D', VK_SPACE, VK_ESCAPE, true };
 
 void
 reset_pong_binds() {
-	pong_binds = { 'W', 'S', VK_UP, VK_DOWN, VK_ESCAPE, false };
+	pong_binds = { 'W', 'S', VK_UP, VK_DOWN, VK_ESCAPE, true };
 }
 
 void

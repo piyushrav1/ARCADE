@@ -5,7 +5,7 @@
 #include "keybinds.h"
 #include "utils.h"
 
-User_Stats user_stats = { 0, true, "PLAYER 1", 0, false, 0, 0, 0, 0 };
+User_Stats user_stats = { 0, -1, -1, true, "PLAYER 1", 0, false, 0, 0, 0, 0 };
 
 internal bool
 get_save_path(char* out_path, int max_len, bool create_dir) {
@@ -78,6 +78,11 @@ load_user_data() {
 		int v = parse_int(val_str);
 
 		if (str_eq(k, "hub_theme"))              user_stats.hub_theme = clamp(0, v, 2);
+		else if (str_eq(k, "pong_theme"))        user_stats.pong_theme = clamp(-1, v, 2);
+		else if (str_eq(k, "breaker_theme"))     user_stats.breaker_theme = clamp(-1, v, 2);
+		else if (str_eq(k, "gfx_fullscreen"))    set_fullscreen(v != 0);
+		else if (str_eq(k, "gfx_res_idx"))       set_windowed_res(v);
+		else if (str_eq(k, "gfx_scanlines"))     set_crt_scanlines(v != 0);
 		else if (str_eq(k, "hub_bgm_on"))        user_stats.hub_bgm_on = (v != 0);
 		else if (str_eq(k, "player_name")) {
 			if (val_str[0] != 0) copy_str(user_stats.player_name, val_str, sizeof(user_stats.player_name));
@@ -116,6 +121,11 @@ save_user_data() {
 	if (!f) return;
 
 	fprintf(f, "hub_theme=%d\n", user_stats.hub_theme);
+	fprintf(f, "pong_theme=%d\n", user_stats.pong_theme);
+	fprintf(f, "breaker_theme=%d\n", user_stats.breaker_theme);
+	fprintf(f, "gfx_fullscreen=%d\n", is_fullscreen() ? 1 : 0);
+	fprintf(f, "gfx_res_idx=%d\n", get_windowed_res());
+	fprintf(f, "gfx_scanlines=%d\n", is_crt_scanlines() ? 1 : 0);
 	fprintf(f, "hub_bgm_on=%d\n", user_stats.hub_bgm_on ? 1 : 0);
 	fprintf(f, "player_name=%s\n", user_stats.player_name);
 	fprintf(f, "avatar_id=%d\n", user_stats.avatar_id);

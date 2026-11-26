@@ -8,6 +8,10 @@
 global_variable bool running = true;
 global_variable bool window_lost_focus = false;
 global_variable HWND main_window = 0;
+global_variable bool fullscreen_mode = true;
+global_variable int  windowed_res_idx = 0;
+global_variable bool crt_scanlines_on = false;
+global_variable bool cursor_visible = true;
 Render_State render_state;
 
 #define AUDIO_SAMPLE_RATE 22050
@@ -195,6 +199,56 @@ void set_music_volume(int pct)    { music_vol_pct = clamp(0, pct, 100); }
 int  get_music_volume()           { return music_vol_pct; }
 void set_sfx_volume(int pct)      { sfx_vol_pct = clamp(0, pct, 100); }
 int  get_sfx_volume()             { return sfx_vol_pct; }
+internal void
+apply_window_mode() {
+	if (!main_window) return;
+	const int RES_W[3] = { 1280, 1600, 1920 };
+	const int RES_H[3] = {  720,  900, 1080 };
+
+	if (fullscreen_mode) {
+		MONITORINFO mi = {};
+		mi.cbSize = sizeof(mi);
+		GetMonitorInfoA(MonitorFromWindow(main_window, MONITOR_DEFAULTTOPRIMARY), &mi);
+		int mw = mi.rcMonitor.right - mi.rcMonitor.left;
+		int mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+		SetWindowLongA(main_window, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+		SetWindowPos(main_window, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mw, mh,
+		             SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+	} else {
+		int w = RES_W[clamp(0, windowed_res_idx, 2)];
+		int h = RES_H[clamp(0, windowed_res_idx, 2)];
+		int sx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
+		int sy = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
+		SetWindowLongA(main_window, GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_VISIBLE);
+		SetWindowPos(main_window, HWND_TOP, sx, sy, w, h,
+		             SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+	}
+}
+
+void set_fullscreen(bool fs) {
+	if (fullscreen_mode == fs) return;
+	fullscreen_mode = fs;
+	apply_window_mode();
+}
+bool is_fullscreen()               { return fullscreen_mode; }
+void set_windowed_res(int idx) {
+	windowed_res_idx = clamp(0, idx, 2);
+	if (!fullscreen_mode) apply_window_mode();
+}
+int  get_windowed_res()            { return windowed_res_idx; }
+void set_crt_scanlines(bool on)    { crt_scanlines_on = on; }
+bool is_crt_scanlines()            { return crt_scanlines_on; }
+
+void set_cursor_visible(bool visible) {
+	if (cursor_visible == visible) return;
+	cursor_visible = visible;
+	if (visible) {
+		while (ShowCursor(TRUE) < 0) {}
+	} else {
+		while (ShowCursor(FALSE) >= 0) {}
+	}
+}
+
 void request_quit()               { running = false; }
 
 internal void
@@ -263,23 +317,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	RegisterClassA(&window_class);
 
-	int win_w = 1280, win_h = 720;
-	int win_x = (GetSystemMetrics(SM_CXSCREEN) - win_w) / 2;
-	int win_y = (GetSystemMetrics(SM_CYSCREEN) - win_h) / 2;
-
 	main_window = CreateWindowA(
 		window_class.lpszClassName,
 		"Arcade Hub",
-		WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-		win_x, win_y, win_w, win_h,
+		WS_POPUP,
+		0, 0, 1280, 720,
 		0, 0, hInstance, 0
 	);
-	ShowWindow(main_window, SW_SHOW);
-	UpdateWindow(main_window);
 	HDC hdc = GetDC(main_window);
 
 	audio_init();
 	hub_init();
+	apply_window_mode();
+	UpdateWindow(main_window);
 
 	Input input = {};
 	float delta_time = 0.016666f;
@@ -406,9 +456,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 
 		audio_pump();
+		if (input.keys_down[VK_F11] && input.keys_changed[VK_F11]) {
+			set_fullscreen(!is_fullscreen());
+		}
 		hub_update(&input, delta_time, fps_smoothed);
 
 		if (render_state.memory) {
+			if (crt_scanlines_on) draw_crt_scanlines(0.18f);
 			StretchDIBits(
 				hdc, 0, 0, render_state.width, render_state.height,
 				0, 0, render_state.width, render_state.height,

@@ -49,6 +49,13 @@ void set_music_volume(int pct);
 int  get_music_volume();
 void set_sfx_volume(int pct);
 int  get_sfx_volume();
+void set_fullscreen(bool fs);
+bool is_fullscreen();
+void set_windowed_res(int idx);
+int  get_windowed_res();
+void set_crt_scanlines(bool enabled);
+bool is_crt_scanlines();
+void set_cursor_visible(bool visible);
 void request_quit();
 
 void hub_init();

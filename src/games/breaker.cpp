@@ -3,19 +3,22 @@
 #include "renderer.h"
 #include "keybinds.h"
 #include "audio_ui.h"
+#include "graphics_ui.h"
+#include "themes.h"
 #include "save.h"
 #include "game_interface.h"
 
-#define is_down(b) input->buttons[b].is_down
 #define pressed(b) (input->buttons[b].is_down && input->buttons[b].changed)
 
 namespace Breaker {
 
 enum Game_State {
+	STATE_INTRO,
 	STATE_MENU,
 	STATE_LEVEL_SELECT,
 	STATE_CONTROLS,
 	STATE_SOUND,
+	STATE_GRAPHICS,
 	STATE_PLAYING,
 	STATE_PAUSED,
 	STATE_LEVEL_CLEAR,
@@ -109,7 +112,10 @@ global_variable const char* LEVELS[BRK_NUM_LEVELS][BRK_ROWS] = {
 	{ "X33333333X", "X3B3333B3X", "X333BB333X", "XX222222XX", "..111111..", ".........." }
 };
 
-global_variable Game_State game_state = STATE_MENU;
+global_variable Game_State game_state = STATE_INTRO;
+global_variable float intro_timer = 0.f;
+global_variable int   intro_stage = 0;
+
 global_variable int menu_sel = 0;
 global_variable int level_sel = 0;
 global_variable int pause_sel = 0;
@@ -148,13 +154,18 @@ sfx(int freq_hz, int duration_ms, float vol = 0.22f, int freq_end_hz = 0) {
 	if (!is_audio_muted()) play_tone(freq_hz, duration_ms, vol, (float)freq_end_hz);
 }
 
+internal bool
+in_rect(float px, float py, float cx, float cy, float hw, float hh) {
+	return absf(px - cx) <= hw && absf(py - cy) <= hh;
+}
+
 internal u32
-brick_color(const Brick* b) {
-	u32 base = 0x38BDF8;
-	if (b->kind == BRICK_1HIT) base = 0x38BDF8;
-	else if (b->kind == BRICK_2HIT) base = (b->hp == 2) ? 0xA855F7 : 0x38BDF8;
-	else if (b->kind == BRICK_3HIT) base = (b->hp == 3) ? 0xF43F5E : (b->hp == 2 ? 0xF59E0B : 0x38BDF8);
-	else if (b->kind == BRICK_STEEL) base = 0x64748B;
+brick_color(const Brick* b, const Theme& th) {
+	u32 base = th.p1;
+	if (b->kind == BRICK_1HIT) base = th.p1;
+	else if (b->kind == BRICK_2HIT) base = (b->hp == 2) ? th.p2 : th.p1;
+	else if (b->kind == BRICK_3HIT) base = (b->hp == 3) ? 0xF43F5E : (b->hp == 2 ? 0xF59E0B : th.p1);
+	else if (b->kind == BRICK_STEEL) base = th.arena_border;
 	else if (b->kind == BRICK_TNT) base = 0xEF4444;
 	return lerp_color(base, 0xFFFFFF, b->flash);
 }
@@ -207,7 +218,7 @@ load_level(int lvl) {
 
 	float start_x = -67.5f;
 	float step_x = 15.0f;
-	float start_y = 28.0f;
+	float start_y = 26.5f;
 	float step_y = 5.4f;
 
 	for (int r = 0; r < BRK_ROWS; r++) {
@@ -254,7 +265,7 @@ maybe_spawn_powerup(float x, float y) {
 }
 
 internal void
-damage_brick(int r, int c) {
+damage_brick(int r, int c, const Theme& th) {
 	if (r < 0 || r >= BRK_ROWS || c < 0 || c >= BRK_COLS) return;
 	Brick* b = &bricks[r][c];
 	if (b->kind == BRICK_NONE) return;
@@ -271,7 +282,7 @@ damage_brick(int r, int c) {
 		b->kind = BRICK_NONE;
 		combo++;
 		score += 50 * combo;
-		spawn_particles(b->x, b->y, (destroyed_kind == BRICK_TNT) ? 0xFACC15 : 0x38BDF8, 10);
+		spawn_particles(b->x, b->y, (destroyed_kind == BRICK_TNT) ? 0xFACC15 : th.accent, 10);
 
 		if (destroyed_kind == BRICK_TNT) {
 			shake_timer = 0.20f;
@@ -279,7 +290,7 @@ damage_brick(int r, int c) {
 			sfx(240, 220, 0.32f, 55);
 			for (int dr = -1; dr <= 1; dr++) {
 				for (int dc = -1; dc <= 1; dc++) {
-					if (dr != 0 || dc != 0) damage_brick(r + dr, c + dc);
+					if (dr != 0 || dc != 0) damage_brick(r + dr, c + dc, th);
 				}
 			}
 		} else {
@@ -316,24 +327,29 @@ count_breakable_bricks() {
 }
 
 internal void
-draw_world(bool show_hud) {
-	clear_screen(0x0B1120);
-	draw_rect(0.f, 0.f, arena_half_x + 1.2f, arena_half_y + 1.2f, 0x334155);
-	draw_rect(0.f, 0.f, arena_half_x, arena_half_y, 0x0F172A);
+draw_world(const Theme& th, bool show_hud) {
+	clear_screen(th.bg_outer);
+	draw_rect(0.f, 0.f, arena_half_x + 1.2f, arena_half_y + 1.2f, th.arena_border);
+	draw_rect(0.f, 0.f, arena_half_x, arena_half_y, th.arena_bg);
 
 	if (show_hud) {
-		draw_text_centered("LVL", -74.f, 40.5f, 0.36f, 0x64748B);
-		draw_number(current_level + 1, -62.f, 40.5f, 0.38f, 0x22D3EE);
+		draw_rect(0.f, 36.f, arena_half_x, 0.25f, th.center_line);
+		draw_text_centered("LVL", -74.f, 40.5f, 0.34f, th.text_dim);
+		draw_number(current_level + 1, -63.f, 40.5f, 0.36f, th.accent);
 
-		draw_text_centered("SCORE", -16.f, 40.5f, 0.36f, 0x64748B);
-		draw_number(score, 8.f, 40.5f, 0.38f, 0xF8FAFC);
+		draw_text_centered("SCORE", -28.f, 40.5f, 0.34f, th.text_dim);
+		draw_number(score, -4.f, 40.5f, 0.36f, th.text);
 
-		draw_text_centered("LIVES", 56.f, 40.5f, 0.36f, 0x64748B);
-		draw_number(lives, 72.f, 40.5f, 0.38f, 0x22C55E);
+		int best = (score > user_stats.breaker_high_score) ? score : user_stats.breaker_high_score;
+		draw_text_centered("BEST", 20.f, 40.5f, 0.34f, th.text_dim);
+		draw_number(best, 40.f, 40.5f, 0.36f, 0xFACC15);
+
+		draw_text_centered("LIVES", 62.f, 40.5f, 0.34f, th.text_dim);
+		draw_number(lives, 76.f, 40.5f, 0.36f, 0x22C55E);
 
 		if (combo >= 2) {
-			draw_text_centered("X", 28.f, 40.5f, 0.36f, 0xFACC15);
-			draw_number(combo, 35.f, 40.5f, 0.36f, 0xFACC15);
+			draw_text_centered("X", -44.f, 40.5f, 0.34f, 0xFACC15);
+			draw_number(combo, -38.f, 40.5f, 0.34f, 0xFACC15);
 		}
 		if (is_audio_muted()) {
 			draw_text_centered("MUTED", 0.f, -42.5f, 0.32f, 0xEF4444);
@@ -352,12 +368,12 @@ draw_world(bool show_hud) {
 		for (int c = 0; c < BRK_COLS; c++) {
 			const Brick* b = &bricks[r][c];
 			if (b->kind == BRICK_NONE) continue;
-			u32 col = brick_color(b);
+			u32 col = brick_color(b, th);
 			draw_rect(b->x, b->y, brick_hx, brick_hy, col);
 			if (b->kind == BRICK_TNT) {
 				draw_text_centered("TNT", b->x, b->y, 0.28f, 0xFEF08A);
 			} else if (b->kind == BRICK_STEEL) {
-				draw_rect(b->x, b->y, brick_hx - 1.2f, brick_hy - 0.8f, 0x475569);
+				draw_rect(b->x, b->y, brick_hx - 1.2f, brick_hy - 0.8f, th.center_line);
 			}
 		}
 	}
@@ -385,7 +401,7 @@ draw_world(bool show_hud) {
 		}
 	}
 
-	u32 pad_col = (laser_timer > 0.f) ? 0xF59E0B : 0x38BDF8;
+	u32 pad_col = (laser_timer > 0.f) ? 0xF59E0B : th.p1;
 	draw_rect(paddle_x, paddle_y, paddle_hx, paddle_hy, pad_col);
 	if (laser_timer > 0.f) {
 		draw_rect(paddle_x - paddle_hx + 1.f, paddle_y + paddle_hy + 0.5f, 0.5f, 0.7f, 0xFACC15);
@@ -394,14 +410,16 @@ draw_world(bool show_hud) {
 
 	for (int i = 0; i < BRK_MAX_BALLS; i++) {
 		if (balls[i].active) {
-			draw_rect(balls[i].x, balls[i].y, ball_r, ball_r, (i == 0) ? 0xF8FAFC : 0x22D3EE);
+			draw_rect(balls[i].x, balls[i].y, ball_r, ball_r, (i == 0) ? th.ball : th.accent);
 		}
 	}
 }
 
 void
 init() {
-	game_state = STATE_MENU;
+	game_state = STATE_INTRO;
+	intro_timer = 0.f;
+	intro_stage = 0;
 	menu_sel = 0;
 	level_sel = 0;
 	pause_sel = 0;
@@ -410,16 +428,21 @@ init() {
 	render_offset_y = 0.f;
 	for (int i = 0; i < BRK_MAX_PARTICLES; i++) particles[i].life = 0.f;
 	load_level(0);
-	game_state = STATE_MENU;
+	game_state = STATE_INTRO;
 }
 
 Game_Result
 update(Input* input, float dt) {
+	const Theme& th = resolve_theme(user_stats.breaker_theme);
+
+	// Hide OS cursor during active gameplay and intro splash
+	set_cursor_visible(game_state != STATE_PLAYING && game_state != STATE_INTRO);
+
 	if (game_state == STATE_CONTROLS) {
 		int tab = 1;
 		if (update_and_draw_keybinds_ui(input, &tab, false,
-		                                0x0B1120, 0x0F172A, 0x334155,
-		                                0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+		                                th.bg_outer, th.arena_bg, th.arena_border,
+		                                th.center_line, th.text, th.text_dim, th.accent)) {
 			save_user_data();
 			game_state = controls_return;
 		}
@@ -428,8 +451,18 @@ update(Input* input, float dt) {
 
 	if (game_state == STATE_SOUND) {
 		if (update_and_draw_audio_ui(input,
-		                             0x0B1120, 0x0F172A, 0x334155,
-		                             0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+		                             th.bg_outer, th.arena_bg, th.arena_border,
+		                             th.center_line, th.text, th.text_dim, th.accent)) {
+			save_user_data();
+			game_state = controls_return;
+		}
+		return GAME_CONTINUE;
+	}
+
+	if (game_state == STATE_GRAPHICS) {
+		if (update_and_draw_graphics_ui(input,
+		                                th.bg_outer, th.arena_bg, th.arena_border,
+		                                th.center_line, th.text, th.text_dim, th.accent)) {
 			save_user_data();
 			game_state = controls_return;
 		}
@@ -439,6 +472,7 @@ update(Input* input, float dt) {
 	if (pressed(BUTTON_M)) {
 		set_audio_muted(!is_audio_muted());
 		if (!is_audio_muted()) sfx(580, 40, 0.16f);
+		save_user_data();
 	}
 
 	if (shake_timer > 0.f) {
@@ -461,35 +495,131 @@ update(Input* input, float dt) {
 		}
 	}
 
-	if (game_state == STATE_MENU) {
-		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { menu_sel = (menu_sel + 4) % 5; sfx(440, 35, 0.15f); }
-		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { menu_sel = (menu_sel + 1) % 5; sfx(440, 35, 0.15f); }
-		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
-			if (menu_sel == 0) start_campaign(0);
-			else if (menu_sel == 1) { level_sel = 0; game_state = STATE_LEVEL_SELECT; }
-			else if (menu_sel == 2) { controls_return = STATE_MENU; game_state = STATE_CONTROLS; }
-			else if (menu_sel == 3) { controls_return = STATE_MENU; game_state = STATE_SOUND; }
-			else {
-				render_offset_x = 0.f; render_offset_y = 0.f;
-				return GAME_EXIT_TO_HUB;
-			}
+	// -----------------------------------------------------------------------
+	// CREATIVE INTRO SPLASH (STATE_INTRO)
+	// -----------------------------------------------------------------------
+	if (game_state == STATE_INTRO) {
+		intro_timer += dt;
+		if (intro_stage == 0) {
+			intro_stage = 1;
+			sfx(240, 140, 0.20f, 720);
+		} else if (intro_stage == 1 && intro_timer >= 0.75f) {
+			intro_stage = 2;
+			sfx(580, 180, 0.24f, 1040);
+			spawn_particles(0.f, 8.f, th.accent, 28);
+		}
+
+		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE) ||
+		    pressed(BUTTON_ESC) || pressed(BUTTON_MOUSE_LEFT) || intro_timer >= 2.0f) {
+			game_state = STATE_MENU;
 			return GAME_CONTINUE;
 		}
+
+		clear_screen(th.bg_outer);
+		draw_rect(0.f, 0.f, arena_half_x + 1.2f, arena_half_y + 1.2f, th.arena_border);
+		draw_rect(0.f, 0.f, arena_half_x, arena_half_y, th.arena_bg);
+
+		int bricks_shown = (int)(intro_timer * 24.f);
+		for (int i = 0; i < 16 && i < bricks_shown; i++) {
+			float bx = -52.5f + (i % 8) * 15.f;
+			float by = 22.f - (i / 8) * 6.5f;
+			draw_rect(bx, by, 6.8f, 2.2f, (i % 2 == 0) ? th.p1 : th.p2);
+		}
+
+		// Laser sweep bar
+		if (intro_timer < 0.75f) {
+			float sy = 26.f - (intro_timer / 0.75f) * 32.f;
+			draw_rect(0.f, sy, 68.f, 0.45f, th.accent);
+		}
+
+		for (int i = 0; i < BRK_MAX_PARTICLES; i++) {
+			if (particles[i].life > 0.f) {
+				float a = particles[i].life / particles[i].max_life;
+				draw_rect_alpha(particles[i].x, particles[i].y, 0.75f, 0.75f, particles[i].color, a);
+			}
+		}
+
+		if (intro_timer >= 0.75f) {
+			draw_text_centered("NEON BREAKER", 0.f, 2.f, 1.25f, th.accent);
+			draw_text_centered("STARTING GAME...", 0.f, -15.f, 0.42f, th.text);
+		} else {
+			draw_text_centered("BUILDING STAGES...", 0.f, -12.f, 0.42f, th.text_dim);
+		}
+		return GAME_CONTINUE;
+	}
+
+	// -----------------------------------------------------------------------
+	// MAIN MENU (Keyboard + Mouse + Theme)
+	// -----------------------------------------------------------------------
+	if (game_state == STATE_MENU) {
+		const int MENU_ITEMS = 7;
+		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { menu_sel = (menu_sel + MENU_ITEMS - 1) % MENU_ITEMS; sfx(440, 35, 0.15f); }
+		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { menu_sel = (menu_sel + 1) % MENU_ITEMS; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_ESC)) {
 			render_offset_x = 0.f; render_offset_y = 0.f;
 			return GAME_EXIT_TO_HUB;
 		}
 
-		draw_world(false);
+		float mx = input->mouse_x;
+		float my = input->mouse_y;
+		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE);
+		for (int i = 0; i < MENU_ITEMS; i++) {
+			float y = 11.f - i * 6.8f;
+			if (in_rect(mx, my, 0.f, y, 42.f, 2.8f)) {
+				if (input->mouse_moved && menu_sel != i) {
+					menu_sel = i;
+					sfx(440, 24, 0.10f);
+				}
+				if (pressed(BUTTON_MOUSE_LEFT)) { menu_sel = i; activate = true; }
+			}
+		}
+
+		int dir = 0;
+		if (pressed(BUTTON_LEFT))  dir = -1;
+		if (pressed(BUTTON_RIGHT)) dir = 1;
+
+		if (activate) {
+			if (menu_sel == 0) { start_campaign(0); return GAME_CONTINUE; }
+			else if (menu_sel == 1) { level_sel = 0; game_state = STATE_LEVEL_SELECT; return GAME_CONTINUE; }
+			else if (menu_sel == 2) { dir = 1; }
+			else if (menu_sel == 3) { controls_return = STATE_MENU; game_state = STATE_CONTROLS; return GAME_CONTINUE; }
+			else if (menu_sel == 4) { controls_return = STATE_MENU; game_state = STATE_SOUND; return GAME_CONTINUE; }
+			else if (menu_sel == 5) { controls_return = STATE_MENU; game_state = STATE_GRAPHICS; return GAME_CONTINUE; }
+			else {
+				render_offset_x = 0.f; render_offset_y = 0.f;
+				return GAME_EXIT_TO_HUB;
+			}
+		}
+		if (dir != 0 && menu_sel == 2) {
+			int cur = user_stats.breaker_theme + 1;
+			cur = (cur + (dir > 0 ? 1 : 3)) % 4;
+			user_stats.breaker_theme = cur - 1;
+			save_user_data();
+			sfx(520, 35, 0.15f);
+		}
+
+		draw_world(th, false);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.78f);
-		draw_text_centered("NEON BREAKER", 0.f, 27.f, 1.20f, 0x22D3EE);
-		draw_text_centered("PLAY CAMPAIGN", 0.f,  9.f, 0.52f, menu_sel == 0 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("LEVEL SELECT",  0.f,  1.f, 0.52f, menu_sel == 1 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("CONTROLS",      0.f, -7.f, 0.52f, menu_sel == 2 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("SOUND",         0.f,-15.f, 0.52f, menu_sel == 3 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("BACK TO HUB",   0.f,-23.f, 0.52f, menu_sel == 4 ? 0xEF4444 : 0xF1F5F9);
-		draw_text_centered(">", -36.f, 9.f - menu_sel * 8.f, 0.52f, 0x22D3EE);
-		draw_text_centered("MOUSE / KEYBOARD SUPPORTED   ESC: HUB   M: MUTE", 0.f, -38.f, 0.32f, 0x64748B);
+		draw_text_centered("NEON BREAKER", 0.f, 32.f, 1.15f, th.accent);
+
+		if (user_stats.breaker_high_score > 0) {
+			draw_text_centered("HIGH SCORE:", -12.f, 21.f, 0.36f, th.text_dim);
+			draw_number(user_stats.breaker_high_score, 18.f, 21.f, 0.38f, 0xFACC15);
+		}
+
+		const char* thm_label = (user_stats.breaker_theme < 0) ? "THEME: FOLLOW HUB" :
+		                        (user_stats.breaker_theme == 1) ? "THEME: CRT" :
+		                        (user_stats.breaker_theme == 2) ? "THEME: SYNTHWAVE" : "THEME: CYBER";
+		const char* mlabels[7] = {
+			"PLAY CAMPAIGN", "LEVEL SELECT", thm_label, "CONTROLS", "SOUND", "GRAPHICS", "BACK TO HUB"
+		};
+		for (int i = 0; i < MENU_ITEMS; i++) {
+			float y = 11.f - i * 6.8f;
+			u32 col = (i == menu_sel) ? (i == 6 ? 0xEF4444 : th.p1) : th.text;
+			draw_text_centered(mlabels[i], 0.f, y, 0.48f, col);
+		}
+		draw_text_centered(">", -40.f, 11.f - menu_sel * 6.8f, 0.48f, th.accent);
+		draw_text_centered("CLICK/ENTER: SELECT   ESC: HUB   M: MUTE", 0.f, -40.f, 0.32f, th.text_dim);
 		return GAME_CONTINUE;
 	}
 
@@ -497,78 +627,111 @@ update(Input* input, float dt) {
 		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { level_sel = (level_sel + BRK_NUM_LEVELS - 1) % BRK_NUM_LEVELS; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { level_sel = (level_sel + 1) % BRK_NUM_LEVELS; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_ESC)) { game_state = STATE_MENU; return GAME_CONTINUE; }
-		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
+
+		float mx = input->mouse_x;
+		float my = input->mouse_y;
+		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE);
+		for (int i = 0; i < BRK_NUM_LEVELS; i++) {
+			float y = 21.f - i * 6.5f;
+			if (in_rect(mx, my, 0.f, y, 44.f, 2.8f)) {
+				if (input->mouse_moved && level_sel != i) {
+					level_sel = i;
+					sfx(440, 24, 0.10f);
+				}
+				if (pressed(BUTTON_MOUSE_LEFT)) { level_sel = i; activate = true; }
+			}
+		}
+		if (activate) {
 			start_campaign(level_sel);
 			return GAME_CONTINUE;
 		}
 
-		draw_world(false);
+		draw_world(th, false);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.84f);
-		draw_text_centered("SELECT LEVEL", 0.f, 34.f, 0.90f, 0x22D3EE);
+		draw_text_centered("SELECT LEVEL", 0.f, 34.f, 0.90f, th.accent);
 		for (int i = 0; i < BRK_NUM_LEVELS; i++) {
 			float y = 21.f - i * 6.5f;
-			u32 col = (i == level_sel) ? 0x38BDF8 : 0x94A3B8;
+			u32 col = (i == level_sel) ? th.p1 : th.text_dim;
 			draw_text_centered(LEVEL_NAMES[i], 0.f, y, 0.44f, col);
 		}
-		draw_text_centered(">", -44.f, 21.f - level_sel * 6.5f, 0.44f, 0x22D3EE);
-		draw_text_centered("ENTER: PLAY   ESC: BACK", 0.f, -38.f, 0.34f, 0x64748B);
+		draw_text_centered(">", -44.f, 21.f - level_sel * 6.5f, 0.44f, th.accent);
+		draw_text_centered("CLICK/ENTER: PLAY   ESC: BACK", 0.f, -38.f, 0.34f, th.text_dim);
 		return GAME_CONTINUE;
 	}
 
 	if (game_state == STATE_PAUSED) {
+		const int PAUSE_ITEMS = 6;
 		if (vk_pressed(input, breaker_binds.pause) || pressed(BUTTON_P)) { game_state = STATE_PLAYING; return GAME_CONTINUE; }
-		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { pause_sel = (pause_sel + 4) % 5; sfx(440, 35, 0.15f); }
-		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { pause_sel = (pause_sel + 1) % 5; sfx(440, 35, 0.15f); }
-		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
+		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { pause_sel = (pause_sel + PAUSE_ITEMS - 1) % PAUSE_ITEMS; sfx(440, 35, 0.15f); }
+		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { pause_sel = (pause_sel + 1) % PAUSE_ITEMS; sfx(440, 35, 0.15f); }
+
+		float mx = input->mouse_x;
+		float my = input->mouse_y;
+		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE);
+		for (int i = 0; i < PAUSE_ITEMS; i++) {
+			float y = 12.f - i * 7.2f;
+			if (in_rect(mx, my, 0.f, y, 36.f, 3.0f)) {
+				if (input->mouse_moved && pause_sel != i) {
+					pause_sel = i;
+					sfx(440, 24, 0.10f);
+				}
+				if (pressed(BUTTON_MOUSE_LEFT)) { pause_sel = i; activate = true; }
+			}
+		}
+
+		if (activate) {
 			if (pause_sel == 0) game_state = STATE_PLAYING;
 			else if (pause_sel == 1) load_level(current_level);
 			else if (pause_sel == 2) { controls_return = STATE_PAUSED; game_state = STATE_CONTROLS; }
 			else if (pause_sel == 3) { controls_return = STATE_PAUSED; game_state = STATE_SOUND; }
+			else if (pause_sel == 4) { controls_return = STATE_PAUSED; game_state = STATE_GRAPHICS; }
 			else game_state = STATE_MENU;
 			return GAME_CONTINUE;
 		}
-		draw_world(true);
+		draw_world(th, true);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.75f);
-		draw_text_centered("PAUSED",        0.f,  24.f, 1.0f, 0x22D3EE);
-		draw_text_centered("RESUME",        0.f,   9.f, 0.52f, pause_sel == 0 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("RESTART LEVEL", 0.f,   1.f, 0.52f, pause_sel == 1 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("CONTROLS",      0.f,  -7.f, 0.52f, pause_sel == 2 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("SOUND",         0.f, -15.f, 0.52f, pause_sel == 3 ? 0x38BDF8 : 0xF1F5F9);
-		draw_text_centered("MAIN MENU",     0.f, -23.f, 0.52f, pause_sel == 4 ? 0xF59E0B : 0xF1F5F9);
-		draw_text_centered(">", -36.f, 9.f - pause_sel * 8.f, 0.52f, 0x22D3EE);
+		draw_text_centered("PAUSED", 0.f, 26.f, 1.0f, th.accent);
+		const char* plabels[6] = { "RESUME", "RESTART LEVEL", "CONTROLS", "SOUND", "GRAPHICS", "MAIN MENU" };
+		for (int i = 0; i < PAUSE_ITEMS; i++) {
+			float y = 12.f - i * 7.2f;
+			u32 col = (i == pause_sel) ? (i == 5 ? th.p2 : th.p1) : th.text;
+			draw_text_centered(plabels[i], 0.f, y, 0.50f, col);
+		}
+		draw_text_centered(">", -36.f, 12.f - pause_sel * 7.2f, 0.50f, th.accent);
 		return GAME_CONTINUE;
 	}
 
 	if (game_state == STATE_LEVEL_CLEAR) {
-		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
+		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE) || pressed(BUTTON_MOUSE_LEFT)) {
 			load_level(current_level + 1);
 			return GAME_CONTINUE;
 		}
 		if (pressed(BUTTON_ESC)) { game_state = STATE_MENU; return GAME_CONTINUE; }
-		draw_world(true);
+		draw_world(th, true);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.78f);
 		draw_text_centered("LEVEL CLEARED!", 0.f, 14.f, 1.0f, 0x22C55E);
-		draw_text_centered(LEVEL_NAMES[current_level], 0.f, 2.f, 0.50f, 0xF1F5F9);
-		draw_text_centered("PRESS SPACE FOR NEXT LEVEL", 0.f, -14.f, 0.42f, 0x22D3EE);
+		draw_text_centered(LEVEL_NAMES[current_level], 0.f, 2.f, 0.50f, th.text);
+		draw_text_centered("CLICK OR PRESS SPACE FOR NEXT LEVEL", 0.f, -14.f, 0.38f, th.accent);
 		return GAME_CONTINUE;
 	}
 
 	if (game_state == STATE_GAME_OVER || game_state == STATE_VICTORY) {
-		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
+		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE) || pressed(BUTTON_MOUSE_LEFT)) {
 			start_campaign(game_state == STATE_VICTORY ? 0 : current_level);
 			return GAME_CONTINUE;
 		}
 		if (pressed(BUTTON_ESC)) { game_state = STATE_MENU; return GAME_CONTINUE; }
-		draw_world(true);
+		draw_world(th, true);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.82f);
 		bool won = (game_state == STATE_VICTORY);
 		draw_text_centered(won ? "ARCADE CONQUERED!" : "GAME OVER", 0.f, 16.f, 1.0f, won ? 0xFACC15 : 0xEF4444);
-		draw_text_centered("FINAL SCORE", 0.f, 2.f, 0.45f, 0x64748B);
-		draw_number(score, 0.f, -6.f, 0.65f, 0xF8FAFC);
-		draw_text_centered("SPACE: RETRY   ESC: MENU", 0.f, -20.f, 0.40f, 0x22D3EE);
+		draw_text_centered("FINAL SCORE", 0.f, 2.f, 0.45f, th.text_dim);
+		draw_number(score, 0.f, -6.f, 0.65f, th.text);
+		draw_text_centered("CLICK/SPACE: RETRY   ESC: MENU", 0.f, -20.f, 0.38f, th.accent);
 		return GAME_CONTINUE;
 	}
 
+	// STATE_PLAYING
 	if (vk_pressed(input, breaker_binds.pause) || pressed(BUTTON_P)) {
 		pause_sel = 0;
 		game_state = STATE_PAUSED;
@@ -593,8 +756,8 @@ update(Input* input, float dt) {
 		paddle_dx = 0.f;
 	} else {
 		float ddp = 0.f;
-		if (vk_down(input, breaker_binds.left)  || is_down(BUTTON_LEFT))  ddp -= 2400.f;
-		if (vk_down(input, breaker_binds.right) || is_down(BUTTON_RIGHT)) ddp += 2400.f;
+		if (vk_down(input, breaker_binds.left)  || vk_down(input, VK_LEFT))  ddp -= 2400.f;
+		if (vk_down(input, breaker_binds.right) || vk_down(input, VK_RIGHT)) ddp += 2400.f;
 		ddp -= paddle_dx * 12.f;
 		paddle_x += paddle_dx * dt + ddp * dt * dt * 0.5f;
 		paddle_dx += ddp * dt;
@@ -636,7 +799,7 @@ update(Input* input, float dt) {
 				if (absf(lasers[i].x - bricks[r][c].x) < brick_hx + 0.45f &&
 				    absf(lasers[i].y - bricks[r][c].y) < brick_hy + 1.6f) {
 					lasers[i].active = false;
-					damage_brick(r, c);
+					damage_brick(r, c, th);
 				}
 			}
 		}
@@ -740,7 +903,7 @@ update(Input* input, float dt) {
 						balls[b].y += (dy > 0.f ? oy : -oy);
 						balls[b].dy *= -1.f;
 					}
-					damage_brick(r, c);
+					damage_brick(r, c, th);
 					goto brick_hit_done;
 				}
 			}
@@ -777,9 +940,8 @@ brick_hit_done:
 		return GAME_CONTINUE;
 	}
 
-	draw_world(true);
+	draw_world(th, true);
 	return GAME_CONTINUE;
 }
 
 } // namespace Breaker
-

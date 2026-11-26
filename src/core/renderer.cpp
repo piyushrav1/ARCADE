@@ -200,3 +200,22 @@ draw_number(int num, float cx, float cy, float pixel_size, u32 color) {
 	draw_text_centered(buf, cx, cy, pixel_size, color);
 }
 
+void
+draw_crt_scanlines(float darken_alpha) {
+	if (!render_state.memory) return;
+	darken_alpha = clampf(0.f, darken_alpha, 0.9f);
+	float keep = 1.f - darken_alpha;
+	int w = render_state.width;
+	int h = render_state.height;
+	for (int y = 0; y < h; y += 3) {
+		u32* row = (u32*)render_state.memory + y * w;
+		for (int x = 0; x < w; x++) {
+			u32 c = row[x];
+			u8 r = (u8)(((c >> 16) & 0xff) * keep);
+			u8 g = (u8)(((c >> 8) & 0xff) * keep);
+			u8 b = (u8)((c & 0xff) * keep);
+			row[x] = (r << 16) | (g << 8) | b;
+		}
+	}
+}
+

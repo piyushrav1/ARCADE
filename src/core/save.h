@@ -2,6 +2,8 @@
 
 struct User_Stats {
 	int hub_theme;
+	int pong_theme;    // -1 = Follow Hub, 0..2 = Custom
+	int breaker_theme; // -1 = Follow Hub, 0..2 = Custom
 	bool hub_bgm_on;
 	char player_name[16];
 	int avatar_id;

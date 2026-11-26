@@ -19,4 +19,5 @@ void draw_rect_alpha(float x, float y, float half_size_x, float half_size_y, u32
 void draw_text_centered(const char* text, float cx, float cy, float pixel_size, u32 color);
 void draw_text_left(const char* text, float left_x, float cy, float pixel_size, u32 color);
 void draw_number(int num, float cx, float cy, float pixel_size, u32 color);
+void draw_crt_scanlines(float darken_alpha);
 
