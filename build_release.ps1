@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root "dist"
 
-if (-not (Test-Path $dist)) { New-Item -ItemType Directory -Path $dist -Force | Out-Null }
+if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
+New-Item -ItemType Directory -Path $dist -Force | Out-Null
 
 Write-Host "Building single-executable dist\ArcadeHub.exe..."
 Push-Location $root
