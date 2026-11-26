@@ -304,6 +304,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			input.keys_changed[i] = false;
 		}
 		input.last_key_pressed = 0;
+		input.text_input_len = 0;
+		input.text_input[0] = 0;
 		if (window_lost_focus) {
 			window_lost_focus = false;
 			for (int i = 0; i < BUTTON_COUNT; i++) {
@@ -345,10 +347,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 					if (down && input.keys_changed[VK_RBUTTON]) input.last_key_pressed = VK_RBUTTON;
 				} break;
 
+				case WM_CHAR: {
+					u32 ch = (u32)message.wParam;
+					if (input.text_input_len < (int)sizeof(input.text_input) - 1) {
+						if (ch == '\b' || (ch >= 32 && ch <= 126)) {
+							input.text_input[input.text_input_len++] = (char)ch;
+							input.text_input[input.text_input_len] = 0;
+						}
+					}
+				} break;
+
 				case WM_SYSKEYUP:
 				case WM_SYSKEYDOWN:
 				case WM_KEYUP:
 				case WM_KEYDOWN: {
+					TranslateMessage(&message);
 					u32 vk_code = (u32)message.wParam;
 					bool is_down = ((message.lParam & (1 << 31)) == 0);
 					if (vk_code < 256) {

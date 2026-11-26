@@ -5,7 +5,7 @@
 #include "keybinds.h"
 #include "utils.h"
 
-User_Stats user_stats = { 0, true, 0, 0, 0, 0 };
+User_Stats user_stats = { 0, true, "PLAYER 1", 0, false, 0, 0, 0, 0 };
 
 internal bool
 get_save_path(char* out_path, int max_len, bool create_dir) {
@@ -29,6 +29,16 @@ str_eq(const char* a, const char* b) {
 		i++;
 	}
 	return a[i] == b[i];
+}
+
+internal void
+copy_str(char* dst, const char* src, int max_len) {
+	int i = 0;
+	while (src[i] && i < max_len - 1) {
+		dst[i] = src[i];
+		i++;
+	}
+	dst[i] = 0;
 }
 
 internal int
@@ -64,10 +74,16 @@ load_user_data() {
 
 		line[eq] = 0;
 		const char* k = line;
-		int v = parse_int(line + eq + 1);
+		const char* val_str = line + eq + 1;
+		int v = parse_int(val_str);
 
 		if (str_eq(k, "hub_theme"))              user_stats.hub_theme = clamp(0, v, 2);
 		else if (str_eq(k, "hub_bgm_on"))        user_stats.hub_bgm_on = (v != 0);
+		else if (str_eq(k, "player_name")) {
+			if (val_str[0] != 0) copy_str(user_stats.player_name, val_str, sizeof(user_stats.player_name));
+		}
+		else if (str_eq(k, "avatar_id"))         user_stats.avatar_id = clamp(0, v, 5);
+		else if (str_eq(k, "profile_created"))   user_stats.profile_created = (v != 0);
 		else if (str_eq(k, "audio_muted"))       set_audio_muted(v != 0);
 		else if (str_eq(k, "vol_master"))        set_master_volume(v);
 		else if (str_eq(k, "vol_music"))         set_music_volume(v);
@@ -101,6 +117,9 @@ save_user_data() {
 
 	fprintf(f, "hub_theme=%d\n", user_stats.hub_theme);
 	fprintf(f, "hub_bgm_on=%d\n", user_stats.hub_bgm_on ? 1 : 0);
+	fprintf(f, "player_name=%s\n", user_stats.player_name);
+	fprintf(f, "avatar_id=%d\n", user_stats.avatar_id);
+	fprintf(f, "profile_created=%d\n", user_stats.profile_created ? 1 : 0);
 	fprintf(f, "audio_muted=%d\n", is_audio_muted() ? 1 : 0);
 	fprintf(f, "vol_master=%d\n", get_master_volume());
 	fprintf(f, "vol_music=%d\n", get_music_volume());

@@ -3,6 +3,9 @@
 struct User_Stats {
 	int hub_theme;
 	bool hub_bgm_on;
+	char player_name[16];
+	int avatar_id;
+	bool profile_created;
 	int pong_best_rally;
 	int pong_wins;
 	int breaker_high_score;
