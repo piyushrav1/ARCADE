@@ -1,6 +1,7 @@
 #include <math.h>
 #include "utils.h"
 #include "renderer.h"
+#include "keybinds.h"
 #include "game_interface.h"
 
 #define is_down(b) input->buttons[b].is_down
@@ -10,6 +11,7 @@ namespace Pong {
 
 enum Game_State {
 	STATE_MENU,
+	STATE_CONTROLS,
 	STATE_PLAYING,
 	STATE_PAUSED,
 	STATE_GAME_OVER
@@ -85,6 +87,7 @@ global_variable bool show_perf_hud = false;
 global_variable int menu_selection = 0;
 global_variable int pause_selection = 0;
 global_variable int gameover_selection = 0;
+global_variable Game_State controls_return_state = STATE_MENU;
 
 global_variable float player_1_p = 0.f, player_1_dp = 0.f;
 global_variable float player_2_p = 0.f, player_2_dp = 0.f;
@@ -430,34 +433,46 @@ update(Input* input, float dt, float fps) {
 		return GAME_CONTINUE;
 	}
 
+	if (game_state == STATE_CONTROLS) {
+		int tab = 0;
+		if (update_and_draw_keybinds_ui(input, &tab, false,
+		                                th.bg_outer, th.arena_bg, th.arena_border,
+		                                th.center_line, th.text, th.text_dim, th.accent)) {
+			game_state = controls_return_state;
+		}
+		return GAME_CONTINUE;
+	}
+
 	if (game_state == STATE_PAUSED) {
-		if (pressed(BUTTON_ESC) || pressed(BUTTON_P)) {
+		if (vk_pressed(input, pong_binds.pause) || pressed(BUTTON_P)) {
 			game_state = STATE_PLAYING;
 			sfx(520, 45, 0.15f);
 		}
 		if (pressed(BUTTON_UP) || pressed(BUTTON_W)) {
-			pause_selection = (pause_selection + 2) % 3;
+			pause_selection = (pause_selection + 3) % 4;
 			sfx(440, 35, 0.15f);
 		}
 		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) {
-			pause_selection = (pause_selection + 1) % 3;
+			pause_selection = (pause_selection + 1) % 4;
 			sfx(440, 35, 0.15f);
 		}
 		if (pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE)) {
 			if (pause_selection == 0) game_state = STATE_PLAYING;
 			else if (pause_selection == 1) start_new_match();
+			else if (pause_selection == 2) { controls_return_state = STATE_PAUSED; game_state = STATE_CONTROLS; }
 			else { game_state = STATE_MENU; pause_selection = 0; }
 			sfx(600, 60, 0.2f);
 		}
 
 		draw_arena_and_entities(true, fps);
 		draw_rect_alpha(0, 0, arena_half_size_x, arena_half_size_y, 0x050814, 0.72f);
-		draw_text_centered("PAUSED",    0.f,  18.f, 1.1f, th.accent);
-		draw_text_centered("RESUME",    0.f,   2.f, 0.65f, pause_selection == 0 ? th.p1 : th.text);
-		draw_text_centered("RESTART",   0.f,  -7.f, 0.65f, pause_selection == 1 ? th.p1 : th.text);
-		draw_text_centered("MAIN MENU", 0.f, -16.f, 0.65f, pause_selection == 2 ? th.p2 : th.text);
-		float sel_y = 2.f - pause_selection * 9.f;
-		draw_text_centered(">", -28.f, sel_y, 0.65f, th.accent);
+		draw_text_centered("PAUSED",    0.f,  22.f, 1.1f, th.accent);
+		draw_text_centered("RESUME",    0.f,   6.f, 0.60f, pause_selection == 0 ? th.p1 : th.text);
+		draw_text_centered("RESTART",   0.f,  -3.f, 0.60f, pause_selection == 1 ? th.p1 : th.text);
+		draw_text_centered("CONTROLS",  0.f, -12.f, 0.60f, pause_selection == 2 ? th.p1 : th.text);
+		draw_text_centered("MAIN MENU", 0.f, -21.f, 0.60f, pause_selection == 3 ? th.p2 : th.text);
+		float sel_y = 6.f - pause_selection * 9.f;
+		draw_text_centered(">", -28.f, sel_y, 0.60f, th.accent);
 		return GAME_CONTINUE;
 	}
 
@@ -491,7 +506,7 @@ update(Input* input, float dt, float fps) {
 		return GAME_CONTINUE;
 	}
 
-	if (pressed(BUTTON_ESC) || pressed(BUTTON_P)) {
+	if (vk_pressed(input, pong_binds.pause) || pressed(BUTTON_P)) {
 		pause_selection = 0;
 		game_state = STATE_PAUSED;
 		sfx(380, 45, 0.15f);
@@ -521,14 +536,19 @@ update(Input* input, float dt, float fps) {
 	}
 
 	float player_1_ddp = 0.f;
-	if (is_down(BUTTON_W) || (is_single_player && is_down(BUTTON_UP)))   player_1_ddp += 2200.f;
-	if (is_down(BUTTON_S) || (is_single_player && is_down(BUTTON_DOWN))) player_1_ddp -= 2200.f;
+	if (vk_down(input, pong_binds.p1_up)   || (is_single_player && vk_down(input, pong_binds.p2_up)))   player_1_ddp += 2200.f;
+	if (vk_down(input, pong_binds.p1_down) || (is_single_player && vk_down(input, pong_binds.p2_down))) player_1_ddp -= 2200.f;
 
 	float player_2_ddp = 0.f;
 	if (!is_single_player) {
-		if (is_down(BUTTON_UP))   player_2_ddp += 2200.f;
-		if (is_down(BUTTON_DOWN)) player_2_ddp -= 2200.f;
+		if (vk_down(input, pong_binds.p2_up))   player_2_ddp += 2200.f;
+		if (vk_down(input, pong_binds.p2_down)) player_2_ddp -= 2200.f;
 	} else {
+		if (pong_binds.mouse_1p && input->mouse_moved) {
+			player_1_p = clampf(-arena_half_size_y + p1_half_y, input->mouse_y, arena_half_size_y - p1_half_y);
+			player_1_dp = 0.f;
+			player_1_ddp = 0.f;
+		}
 		float ai_accel = 1300.f;
 		float deadzone = 3.5f;
 		if (difficulty == DIFF_MEDIUM) { ai_accel = 1750.f; deadzone = 2.0f; }

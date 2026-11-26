@@ -29,6 +29,9 @@ enum {
 
 struct Input {
 	Button_State buttons[BUTTON_COUNT];
+	bool keys_down[256];
+	bool keys_changed[256];
+	int last_key_pressed; // VK code pressed this frame (0 if none)
 	float mouse_x;
 	float mouse_y;
 	bool mouse_moved;

@@ -287,10 +287,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		for (int i = 0; i < BUTTON_COUNT; i++) {
 			input.buttons[i].changed = false;
 		}
+		for (int i = 0; i < 256; i++) {
+			input.keys_changed[i] = false;
+		}
+		input.last_key_pressed = 0;
 		if (window_lost_focus) {
 			window_lost_focus = false;
 			for (int i = 0; i < BUTTON_COUNT; i++) {
 				input.buttons[i].is_down = false;
+			}
+			for (int i = 0; i < 256; i++) {
+				input.keys_down[i] = false;
 			}
 		}
 		input.mouse_moved = false;
@@ -312,12 +319,32 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 					bool down = (message.message == WM_LBUTTONDOWN);
 					input.buttons[BUTTON_MOUSE_LEFT].changed = (down != input.buttons[BUTTON_MOUSE_LEFT].is_down);
 					input.buttons[BUTTON_MOUSE_LEFT].is_down = down;
+					input.keys_changed[VK_LBUTTON] = (down != input.keys_down[VK_LBUTTON]);
+					input.keys_down[VK_LBUTTON] = down;
+					if (down && input.keys_changed[VK_LBUTTON]) input.last_key_pressed = VK_LBUTTON;
 				} break;
 
+				case WM_RBUTTONDOWN:
+				case WM_RBUTTONUP: {
+					bool down = (message.message == WM_RBUTTONDOWN);
+					input.keys_changed[VK_RBUTTON] = (down != input.keys_down[VK_RBUTTON]);
+					input.keys_down[VK_RBUTTON] = down;
+					if (down && input.keys_changed[VK_RBUTTON]) input.last_key_pressed = VK_RBUTTON;
+				} break;
+
+				case WM_SYSKEYUP:
+				case WM_SYSKEYDOWN:
 				case WM_KEYUP:
 				case WM_KEYDOWN: {
 					u32 vk_code = (u32)message.wParam;
 					bool is_down = ((message.lParam & (1 << 31)) == 0);
+					if (vk_code < 256) {
+						input.keys_changed[vk_code] = (is_down != input.keys_down[vk_code]);
+						input.keys_down[vk_code] = is_down;
+						if (is_down && input.keys_changed[vk_code]) {
+							input.last_key_pressed = (int)vk_code;
+						}
+					}
 
 #define process_button(b, vk) \
 	case vk: { \

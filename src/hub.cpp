@@ -1,13 +1,15 @@
 #include <math.h>
 #include "utils.h"
 #include "renderer.h"
+#include "keybinds.h"
 #include "game_interface.h"
 
 #define pressed(b) (input->buttons[b].is_down && input->buttons[b].changed)
 
 enum Hub_State {
 	HUB_SPLASH,
-	HUB_MENU
+	HUB_MENU,
+	HUB_CONTROLS
 };
 
 enum Active_Scene {
@@ -61,6 +63,7 @@ global_variable float splash_timer = 0.f;
 global_variable int   splash_stage = 0;
 
 global_variable int  selected_idx = 0;
+global_variable int  controls_tab = 0;
 global_variable int  theme_idx = 0;
 global_variable bool bgm_on = true;
 global_variable float anim_time = 0.f;
@@ -206,8 +209,24 @@ hub_update(Input* input, float dt, float fps) {
 		return;
 	}
 
+	// HUB_CONTROLS
+	if (hub_state == HUB_CONTROLS) {
+		if (update_and_draw_keybinds_ui(input, &controls_tab, true,
+		                                th.bg_outer, th.panel_bg, th.panel_border,
+		                                th.card_bg, th.text, th.text_dim, th.accent)) {
+			hub_state = HUB_MENU;
+		}
+		return;
+	}
+
 	// HUB_MENU
 	if (pressed(BUTTON_ESC)) { request_quit(); return; }
+	if (vk_pressed(input, VK_TAB)) {
+		controls_tab = selected_idx;
+		hub_state = HUB_CONTROLS;
+		sfx(520, 40, 0.16f);
+		return;
+	}
 	if (pressed(BUTTON_M)) {
 		set_audio_muted(!is_audio_muted());
 		if (!is_audio_muted()) sfx(580, 45, 0.18f);
@@ -224,11 +243,13 @@ hub_update(Input* input, float dt, float fps) {
 
 	float mx = input->mouse_x;
 	float my = input->mouse_y;
+	bool hov_keys  = point_in_rect(mx, my, 16.f, 36.f, 11.f, 2.6f);
 	bool hov_theme = point_in_rect(mx, my, 40.f, 36.f, 11.f, 2.6f);
 	bool hov_music = point_in_rect(mx, my, 64.f, 36.f, 11.f, 2.6f);
 
 	if (pressed(BUTTON_MOUSE_LEFT)) {
-		if (hov_theme) { theme_idx = (theme_idx + 1) % 3; sfx(520, 35, 0.15f); }
+		if (hov_keys) { controls_tab = selected_idx; hub_state = HUB_CONTROLS; sfx(520, 40, 0.16f); return; }
+		else if (hov_theme) { theme_idx = (theme_idx + 1) % 3; sfx(520, 35, 0.15f); }
 		else if (hov_music) { bgm_on = !bgm_on; set_bgm_enabled(bgm_on); sfx(520, 40, 0.16f); }
 	}
 
@@ -263,6 +284,7 @@ hub_update(Input* input, float dt, float fps) {
 	draw_text_left("ARCADE HUB", -74.f, 36.f, 0.85f, th.accent);
 	draw_rect(0.f, 29.5f, 74.f, 0.22f, th.panel_border);
 
+	draw_pill(16.f, 36.f, 11.f, 2.6f, "KEYS", th.card_bg, th.panel_border, th.text, hov_keys);
 	draw_pill(40.f, 36.f, 11.f, 2.6f, th.name, th.card_bg, th.panel_border, th.text, hov_theme);
 	bool muted = is_audio_muted();
 	const char* music_lbl = muted ? "MUTED" : (bgm_on ? "MUSIC:ON" : "MUSIC:OFF");
@@ -290,7 +312,7 @@ hub_update(Input* input, float dt, float fps) {
 		draw_text_centered(is_sel ? "PLAY" : "READY", 62.f, cy - 1.9f, 0.36f, is_sel ? th.accent : 0x22C55E);
 	}
 
-	draw_text_centered("UP/DOWN: SELECT   ENTER/CLICK: PLAY   B: MUSIC   T: THEME   M: MUTE   ESC: QUIT",
-	                   0.f, -40.5f, 0.30f, th.text_dim);
+	draw_text_centered("ENTER/CLICK: PLAY   TAB: KEYBINDS   B: MUSIC   T: THEME   M: MUTE   ESC: QUIT",
+	                   0.f, -40.5f, 0.28f, th.text_dim);
 }
 
