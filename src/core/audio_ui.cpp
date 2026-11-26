@@ -57,9 +57,9 @@ update_and_draw_audio_ui(Input* input,
 			if (vk_pressed(input, VK_LBUTTON)) {
 				audio_row = i;
 				if (i < 3 && in_rect(mx, my, 22.f, ry, 18.f, 2.5f)) {
-					// Click directly on the volume bar (22 - 17.5 .. 22 + 17.5)
 					float norm = clampf(0.f, (mx - 4.5f) / 35.f, 1.f);
-					int snapped = ((int)(norm * 10.f + 0.5f)) * 10;
+					int snapped = (mx < 5.5f) ? 0 : (((int)(norm * 9.f + 0.5f) + 1) * 10);
+					snapped = clamp(0, snapped, 100);
 					if (i == 0) set_master_volume(snapped);
 					else if (i == 1) set_music_volume(snapped);
 					else set_sfx_volume(snapped);

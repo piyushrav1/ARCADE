@@ -317,6 +317,25 @@ Game_Result
 update(Input* input, float dt, float fps) {
 	const Theme& th = THEMES[theme_idx];
 
+	if (game_state == STATE_CONTROLS) {
+		int tab = 0;
+		if (update_and_draw_keybinds_ui(input, &tab, false,
+		                                th.bg_outer, th.arena_bg, th.arena_border,
+		                                th.center_line, th.text, th.text_dim, th.accent)) {
+			game_state = controls_return_state;
+		}
+		return GAME_CONTINUE;
+	}
+
+	if (game_state == STATE_SOUND) {
+		if (update_and_draw_audio_ui(input,
+		                             th.bg_outer, th.arena_bg, th.arena_border,
+		                             th.center_line, th.text, th.text_dim, th.accent)) {
+			game_state = controls_return_state;
+		}
+		return GAME_CONTINUE;
+	}
+
 	if (pressed(BUTTON_M)) {
 		set_audio_muted(!is_audio_muted());
 		if (!is_audio_muted()) sfx(580, 40, 0.15f);
@@ -432,25 +451,6 @@ update(Input* input, float dt, float fps) {
 		draw_text_centered("<",  48.f, sel_y, 0.55f, th.accent);
 
 		draw_text_centered("ENTER: SELECT   ESC: HUB   M: MUTE   F1: PERF HUD", 0.f, -39.f, 0.36f, th.text_dim);
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_CONTROLS) {
-		int tab = 0;
-		if (update_and_draw_keybinds_ui(input, &tab, false,
-		                                th.bg_outer, th.arena_bg, th.arena_border,
-		                                th.center_line, th.text, th.text_dim, th.accent)) {
-			game_state = controls_return_state;
-		}
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_SOUND) {
-		if (update_and_draw_audio_ui(input,
-		                             th.bg_outer, th.arena_bg, th.arena_border,
-		                             th.center_line, th.text, th.text_dim, th.accent)) {
-			game_state = controls_return_state;
-		}
 		return GAME_CONTINUE;
 	}
 

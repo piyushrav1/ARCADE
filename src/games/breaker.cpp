@@ -414,6 +414,25 @@ init() {
 
 Game_Result
 update(Input* input, float dt) {
+	if (game_state == STATE_CONTROLS) {
+		int tab = 1;
+		if (update_and_draw_keybinds_ui(input, &tab, false,
+		                                0x0B1120, 0x0F172A, 0x334155,
+		                                0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+			game_state = controls_return;
+		}
+		return GAME_CONTINUE;
+	}
+
+	if (game_state == STATE_SOUND) {
+		if (update_and_draw_audio_ui(input,
+		                             0x0B1120, 0x0F172A, 0x334155,
+		                             0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+			game_state = controls_return;
+		}
+		return GAME_CONTINUE;
+	}
+
 	if (pressed(BUTTON_M)) {
 		set_audio_muted(!is_audio_muted());
 		if (!is_audio_muted()) sfx(580, 40, 0.16f);
@@ -437,25 +456,6 @@ update(Input* input, float dt) {
 			particles[i].y += particles[i].vy * dt;
 			particles[i].life -= dt;
 		}
-	}
-
-	if (game_state == STATE_CONTROLS) {
-		int tab = 1;
-		if (update_and_draw_keybinds_ui(input, &tab, false,
-		                                0x0B1120, 0x0F172A, 0x334155,
-		                                0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
-			game_state = controls_return;
-		}
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_SOUND) {
-		if (update_and_draw_audio_ui(input,
-		                             0x0B1120, 0x0F172A, 0x334155,
-		                             0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
-			game_state = controls_return;
-		}
-		return GAME_CONTINUE;
 	}
 
 	if (game_state == STATE_MENU) {
@@ -541,6 +541,7 @@ update(Input* input, float dt) {
 			load_level(current_level + 1);
 			return GAME_CONTINUE;
 		}
+		if (pressed(BUTTON_ESC)) { game_state = STATE_MENU; return GAME_CONTINUE; }
 		draw_world(true);
 		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.78f);
 		draw_text_centered("LEVEL CLEARED!", 0.f, 14.f, 1.0f, 0x22C55E);
