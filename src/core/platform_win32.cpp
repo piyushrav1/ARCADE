@@ -4,15 +4,12 @@
 #include "utils.h"
 #include "platform.h"
 #include "renderer.h"
-#include "launcher.h"
 
 global_variable bool running = true;
+global_variable bool window_lost_focus = false;
 global_variable HWND main_window = 0;
 Render_State render_state;
 
-// ---------------------------------------------------------------------------
-// Real-time waveOut Chiptune BGM + SFX Mixer (zero-dependency, single-thread)
-// ---------------------------------------------------------------------------
 #define AUDIO_SAMPLE_RATE 22050
 #define AUDIO_BUF_SAMPLES 1024
 #define AUDIO_NUM_BUFS    3
@@ -34,10 +31,7 @@ global_variable s16 wave_bufs[AUDIO_NUM_BUFS][AUDIO_BUF_SAMPLES];
 global_variable Sfx_Voice sfx_voices[MAX_SFX_VOICES];
 global_variable bool audio_muted = false;
 global_variable bool bgm_enabled = true;
-global_variable bool bgm_paused_for_game = false;
 
-// Nostalgic 32-step arcade chiptune loop (16th-note grid @ ~135 BPM)
-// Frequencies in Hz (0 = rest)
 global_variable const float BGM_LEAD[32] = {
 	523.25f, 0.f, 659.25f, 783.99f,  659.25f, 0.f, 523.25f, 0.f,
 	587.33f, 0.f, 698.46f, 880.00f,  783.99f, 0.f, 659.25f, 0.f,
@@ -84,19 +78,17 @@ audio_init() {
 
 internal void
 audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
-	const int samples_per_step = AUDIO_SAMPLE_RATE / 9; // ~135 BPM 16th notes
+	const int samples_per_step = AUDIO_SAMPLE_RATE / 9;
 	for (int i = 0; i < AUDIO_BUF_SAMPLES; i++) {
 		float mix = 0.f;
 
 		if (!audio_muted) {
-			// BGM synthesizer
-			if (bgm_enabled && !bgm_paused_for_game) {
+			if (bgm_enabled) {
 				float step_t = (float)bgm_sample_in_step / (float)samples_per_step;
 				float lf = BGM_LEAD[bgm_step];
 				if (lf > 0.f) {
 					bgm_lead_phase += lf / (float)AUDIO_SAMPLE_RATE;
 					if (bgm_lead_phase >= 1.f) bgm_lead_phase -= 1.f;
-					// 25% pulse wave with gentle decay envelope
 					float pulse = (bgm_lead_phase < 0.25f) ? 1.f : -1.f;
 					float env = 1.f - step_t * 0.7f;
 					mix += pulse * env * 0.075f;
@@ -106,13 +98,11 @@ audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
 				if (bf > 0.f) {
 					bgm_bass_phase += bf / (float)AUDIO_SAMPLE_RATE;
 					if (bgm_bass_phase >= 1.f) bgm_bass_phase -= 1.f;
-					// Triangle-like bass
 					float tri = 1.f - 4.f * absf(bgm_bass_phase - 0.5f);
 					float benv = 1.f - step_t * 0.45f;
 					mix += tri * benv * 0.095f;
 				}
 
-				// Soft retro hi-hat tick on odd steps
 				if ((bgm_step & 1) == 1 && step_t < 0.18f) {
 					audio_noise_rng = audio_noise_rng * 1664525u + 1013904223u;
 					float n = ((float)(audio_noise_rng & 0xFFFF) / 32768.f) - 1.f;
@@ -126,7 +116,6 @@ audio_fill_and_submit(WAVEHDR* hdr, s16* buf) {
 				}
 			}
 
-			// SFX voices
 			for (int v = 0; v < MAX_SFX_VOICES; v++) {
 				if (!sfx_voices[v].active) continue;
 				Sfx_Voice* sv = &sfx_voices[v];
@@ -190,102 +179,10 @@ play_tone(int freq_hz, int duration_ms, float volume, float freq_end_hz) {
 	sfx_voices[slot].samples_left = samples;
 }
 
-void
-set_bgm_enabled(bool enabled) {
-	bgm_enabled = enabled;
-}
-
-void
-set_audio_muted(bool muted) {
-	audio_muted = muted;
-}
-
-void
-request_quit() {
-	running = false;
-}
-
-void
-get_exe_dir(char* out_buf, int buf_size) {
-	if (!out_buf || buf_size <= 0) return;
-	DWORD len = GetModuleFileNameA(NULL, out_buf, (DWORD)buf_size);
-	if (len == 0 || (int)len >= buf_size) {
-		out_buf[0] = '.';
-		out_buf[1] = 0;
-		return;
-	}
-	int last_sep = -1;
-	for (int i = 0; out_buf[i]; i++) {
-		if (out_buf[i] == '\\' || out_buf[i] == '/') last_sep = i;
-	}
-	if (last_sep >= 0) out_buf[last_sep] = 0;
-	else { out_buf[0] = '.'; out_buf[1] = 0; }
-}
-
-bool
-file_exists(const char* path) {
-	if (!path || !path[0]) return false;
-	DWORD attr = GetFileAttributesA(path);
-	return (attr != INVALID_FILE_ATTRIBUTES) && !(attr & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-bool
-launch_game(const char* exe_path, const char* work_dir) {
-	if (!file_exists(exe_path)) return false;
-
-	STARTUPINFOA si = {};
-	si.cb = sizeof(si);
-	PROCESS_INFORMATION pi = {};
-
-	const char* dir = (work_dir && work_dir[0]) ? work_dir : NULL;
-	BOOL ok = CreateProcessA(
-		exe_path,
-		NULL,
-		NULL,
-		NULL,
-		FALSE,
-		0,
-		NULL,
-		dir,
-		&si,
-		&pi
-	);
-	if (!ok) return false;
-
-	bgm_paused_for_game = true;
-	if (h_wave_out) waveOutReset(h_wave_out);
-	if (main_window) ShowWindow(main_window, SW_HIDE);
-
-	while (true) {
-		DWORD wait_res = MsgWaitForMultipleObjects(1, &pi.hProcess, FALSE, INFINITE, QS_ALLINPUT);
-		if (wait_res == WAIT_OBJECT_0) break;
-		MSG msg;
-		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-			if (msg.message == WM_QUIT) {
-				running = false;
-				break;
-			}
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-		if (!running) break;
-	}
-
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
-
-	bgm_paused_for_game = false;
-	if (h_wave_out) {
-		for (int i = 0; i < AUDIO_NUM_BUFS; i++) {
-			wave_hdrs[i].dwFlags |= WHDR_DONE;
-		}
-	}
-	if (main_window && running) {
-		ShowWindow(main_window, SW_SHOW);
-		SetForegroundWindow(main_window);
-	}
-	return true;
-}
+void set_bgm_enabled(bool enabled) { bgm_enabled = enabled; }
+void set_audio_muted(bool muted)  { audio_muted = muted; }
+bool is_audio_muted()             { return audio_muted; }
+void request_quit()               { running = false; }
 
 internal void
 screen_to_world(int sx, int sy, float* wx, float* wy) {
@@ -293,7 +190,6 @@ screen_to_world(int sx, int sy, float* wx, float* wy) {
 		*wx = 0.f; *wy = 0.f; return;
 	}
 	float scale = render_state.height * 0.01f;
-	// Note: StretchDIBits with positive biHeight maps row 0 to bottom of screen
 	float flipped_y = (float)(render_state.height - sy);
 	*wx = ((float)sx - render_state.width * 0.5f) / scale;
 	*wy = (flipped_y - render_state.height * 0.5f) / scale;
@@ -305,6 +201,10 @@ LRESULT CALLBACK window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		case WM_CLOSE:
 		case WM_DESTROY: {
 			running = false;
+		} break;
+
+		case WM_KILLFOCUS: {
+			window_lost_focus = true;
 		} break;
 
 		case WM_SIZE: {
@@ -344,17 +244,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	WNDCLASSA window_class = {};
 	window_class.style = CS_HREDRAW | CS_VREDRAW;
-	window_class.lpszClassName = "Arcade Launcher Window Class";
+	window_class.lpszClassName = "Arcade Hub Window Class";
 	window_class.lpfnWndProc = window_callback;
 	window_class.hInstance = hInstance;
 
 	RegisterClassA(&window_class);
 
+	int win_w = 1280, win_h = 720;
+	int win_x = (GetSystemMetrics(SM_CXSCREEN) - win_w) / 2;
+	int win_y = (GetSystemMetrics(SM_CYSCREEN) - win_h) / 2;
+
 	main_window = CreateWindowA(
 		window_class.lpszClassName,
-		"Arcade Hub - Game Launcher",
+		"Arcade Hub",
 		WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-		CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
+		win_x, win_y, win_w, win_h,
 		0, 0, hInstance, 0
 	);
 	ShowWindow(main_window, SW_SHOW);
@@ -362,10 +266,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	HDC hdc = GetDC(main_window);
 
 	audio_init();
-	init_launcher();
+	hub_init();
 
 	Input input = {};
 	float delta_time = 0.016666f;
+	float fps_smoothed = 60.f;
 	LARGE_INTEGER frame_begin_time;
 	QueryPerformanceCounter(&frame_begin_time);
 
@@ -381,6 +286,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 		for (int i = 0; i < BUTTON_COUNT; i++) {
 			input.buttons[i].changed = false;
+		}
+		if (window_lost_focus) {
+			window_lost_focus = false;
+			for (int i = 0; i < BUTTON_COUNT; i++) {
+				input.buttons[i].is_down = false;
+			}
 		}
 		input.mouse_moved = false;
 
@@ -420,15 +331,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 						process_button(BUTTON_LEFT, VK_LEFT);
 						process_button(BUTTON_RIGHT, VK_RIGHT);
 						process_button(BUTTON_W, 'W');
+						process_button(BUTTON_A, 'A');
 						process_button(BUTTON_S, 'S');
+						process_button(BUTTON_D, 'D');
 						process_button(BUTTON_ENTER, VK_RETURN);
 						process_button(BUTTON_SPACE, VK_SPACE);
 						process_button(BUTTON_ESC, VK_ESCAPE);
+						process_button(BUTTON_P, 'P');
 						process_button(BUTTON_M, 'M');
 						process_button(BUTTON_T, 'T');
 						process_button(BUTTON_B, 'B');
-						process_button(BUTTON_C, 'C');
-						process_button(BUTTON_V, 'V');
+						process_button(BUTTON_F1, VK_F1);
 					}
 				} break;
 
@@ -440,7 +353,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 
 		audio_pump();
-		simulate_launcher(&input, delta_time);
+		hub_update(&input, delta_time, fps_smoothed);
 
 		if (render_state.memory) {
 			StretchDIBits(
@@ -454,6 +367,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		LARGE_INTEGER frame_end_time;
 		QueryPerformanceCounter(&frame_end_time);
 		float raw_dt = (float)(frame_end_time.QuadPart - frame_begin_time.QuadPart) / performance_frequency;
+		if (raw_dt > 0.0001f) {
+			fps_smoothed = fps_smoothed * 0.9f + (1.f / raw_dt) * 0.1f;
+		}
 		delta_time = clampf(0.0001f, raw_dt, 0.05f);
 		frame_begin_time = frame_end_time;
 	}
@@ -461,3 +377,4 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	audio_shutdown();
 	return 0;
 }
+
