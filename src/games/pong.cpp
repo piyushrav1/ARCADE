@@ -2,8 +2,7 @@
 #include "utils.h"
 #include "renderer.h"
 #include "keybinds.h"
-#include "audio_ui.h"
-#include "graphics_ui.h"
+#include "settings_ui.h"
 #include "themes.h"
 #include "save.h"
 #include "game_interface.h"
@@ -15,9 +14,7 @@ namespace Pong {
 enum Game_State {
 	STATE_INTRO,
 	STATE_MENU,
-	STATE_CONTROLS,
-	STATE_SOUND,
-	STATE_GRAPHICS,
+	STATE_SETTINGS,
 	STATE_PLAYING,
 	STATE_PAUSED,
 	STATE_GAME_OVER
@@ -65,6 +62,7 @@ global_variable const int   WIN_SCORES[3] = { 5, 7, 11 };
 global_variable Game_State game_state = STATE_INTRO;
 global_variable float intro_timer = 0.f;
 global_variable int   intro_stage = 0;
+global_variable float menu_anim_t = 0.f;
 
 global_variable bool is_single_player = true;
 global_variable Difficulty difficulty = DIFF_MEDIUM;
@@ -312,32 +310,10 @@ update(Input* input, float dt, float fps) {
 	// Hide OS cursor during active gameplay and intro splash
 	set_cursor_visible(game_state != STATE_PLAYING && game_state != STATE_INTRO);
 
-	if (game_state == STATE_CONTROLS) {
-		int tab = 0;
-		if (update_and_draw_keybinds_ui(input, &tab, false,
-		                                th.bg_outer, th.arena_bg, th.arena_border,
-		                                th.center_line, th.text, th.text_dim, th.accent)) {
-			save_user_data();
-			game_state = controls_return_state;
-		}
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_SOUND) {
-		if (update_and_draw_audio_ui(input,
-		                             th.bg_outer, th.arena_bg, th.arena_border,
-		                             th.center_line, th.text, th.text_dim, th.accent)) {
-			save_user_data();
-			game_state = controls_return_state;
-		}
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_GRAPHICS) {
-		if (update_and_draw_graphics_ui(input,
-		                                th.bg_outer, th.arena_bg, th.arena_border,
-		                                th.center_line, th.text, th.text_dim, th.accent)) {
-			save_user_data();
+	if (game_state == STATE_SETTINGS) {
+		if (update_and_draw_settings_ui(input, 0,
+		                                th.bg_outer, th.panel_bg, th.panel_border,
+		                                th.card_bg, th.text, th.text_dim, th.accent)) {
 			game_state = controls_return_state;
 		}
 		return GAME_CONTINUE;
@@ -425,29 +401,16 @@ update(Input* input, float dt, float fps) {
 	}
 
 	// -----------------------------------------------------------------------
-	// MAIN MENU (Keyboard + Mouse)
+	// MAIN MENU (Creative Backdrop — No Gameplay Behind Menu)
 	// -----------------------------------------------------------------------
 	if (game_state == STATE_MENU) {
+		menu_anim_t += dt;
 		if (pressed(BUTTON_ESC)) {
 			render_offset_x = 0.f; render_offset_y = 0.f;
 			return GAME_EXIT_TO_HUB;
 		}
-		balls[0].active = true;
-		balls[1].active = false;
-		balls[0].x += balls[0].dx * dt * 0.6f;
-		balls[0].y += balls[0].dy * dt * 0.6f;
-		if (balls[0].x > arena_half_size_x - ball_half_size || balls[0].x < -arena_half_size_x + ball_half_size) balls[0].dx *= -1.f;
-		if (balls[0].y > arena_half_size_y - ball_half_size || balls[0].y < -arena_half_size_y + ball_half_size) balls[0].dy *= -1.f;
 
-		trail_timer += dt;
-		if (trail_timer >= 0.02f) {
-			trail_timer = 0.f;
-			trail[trail_head].x = balls[0].x;
-			trail[trail_head].y = balls[0].y;
-			trail_head = (trail_head + 1) % PONG_TRAIL_LEN;
-		}
-
-		const int MENU_ITEMS = 8;
+		const int MENU_ITEMS = 7;
 		if (pressed(BUTTON_UP) || pressed(BUTTON_W)) {
 			menu_selection = (menu_selection + MENU_ITEMS - 1) % MENU_ITEMS;
 			sfx(440, 35, 0.15f);
@@ -461,7 +424,7 @@ update(Input* input, float dt, float fps) {
 		float my = input->mouse_y;
 		bool clicked = pressed(BUTTON_MOUSE_LEFT);
 		for (int i = 0; i < MENU_ITEMS; i++) {
-			float y = 16.f - i * 6.5f;
+			float y = 14.f - i * 7.2f;
 			if (in_rect(mx, my, 0.f, y, 48.f, 2.8f)) {
 				if ((input->mouse_moved || clicked) && menu_selection != i) {
 					menu_selection = i;
@@ -474,13 +437,13 @@ update(Input* input, float dt, float fps) {
 		if (pressed(BUTTON_LEFT))  dir_change = -1;
 		if (pressed(BUTTON_RIGHT)) dir_change = 1;
 		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE) ||
-		                (clicked && in_rect(mx, my, 0.f, 16.f - menu_selection * 6.5f, 48.f, 2.8f));
+		                (clicked && in_rect(mx, my, 0.f, 14.f - menu_selection * 7.2f, 48.f, 2.8f));
 
 		if (activate) {
 			if (menu_selection == 0) { is_single_player = true; start_new_match(); return GAME_CONTINUE; }
 			else if (menu_selection == 1) { is_single_player = false; start_new_match(); return GAME_CONTINUE; }
-			else if (menu_selection == 6) { controls_return_state = STATE_MENU; game_state = STATE_GRAPHICS; return GAME_CONTINUE; }
-			else if (menu_selection == 7) {
+			else if (menu_selection == 5) { controls_return_state = STATE_MENU; game_state = STATE_SETTINGS; return GAME_CONTINUE; }
+			else if (menu_selection == 6) {
 				render_offset_x = 0.f; render_offset_y = 0.f;
 				return GAME_EXIT_TO_HUB;
 			}
@@ -490,58 +453,62 @@ update(Input* input, float dt, float fps) {
 			if (menu_selection == 2) difficulty = (Difficulty)(((int)difficulty + (dir_change > 0 ? 1 : 2)) % 3);
 			else if (menu_selection == 3) arcade_mode = !arcade_mode;
 			else if (menu_selection == 4) win_score_idx = (win_score_idx + (dir_change > 0 ? 1 : 2)) % 3;
-			else if (menu_selection == 5) {
-				// Cycle -1 (FOLLOW HUB) -> 0 -> 1 -> 2
-				int cur = user_stats.pong_theme + 1; // 0..3
-				cur = (cur + (dir_change > 0 ? 1 : 3)) % 4;
-				user_stats.pong_theme = cur - 1;
-				save_user_data();
-			}
 			sfx(520, 35, 0.15f);
 		}
 
-		draw_arena_and_entities(th, false, fps);
-		draw_rect_alpha(0, 0, arena_half_size_x, arena_half_size_y, 0x050814, 0.70f);
+		// Dedicated creative menu backdrop (no paddles/ball)
+		clear_screen(th.bg_outer);
+		draw_rect(0.f, 0.f, arena_half_size_x + 1.2f, arena_half_size_y + 1.2f, th.panel_border);
+		draw_rect(0.f, 0.f, arena_half_size_x, arena_half_size_y, th.panel_bg);
+		for (float gx = -60.f; gx <= 60.f; gx += 30.f) draw_rect_alpha(gx, 0.f, 0.12f, 45.f, th.panel_border, 0.22f);
+		for (float gy = -30.f; gy <= 30.f; gy += 15.f) draw_rect_alpha(0.f, gy, 85.f, 0.12f, th.panel_border, 0.22f);
+		for (int s = 0; s < 16; s++) {
+			float sx = -75.f + ((s * 37) % 150);
+			float sy = 44.f - fmodf(menu_anim_t * (3.f + (s % 4) * 1.5f) + s * 6.f, 88.f);
+			draw_rect_alpha(sx, sy, 0.35f, 0.35f, th.accent, 0.35f);
+		}
 
-		draw_text_centered("PONG ARENA", 0.f, 32.f, 1.25f, th.accent);
+		draw_text_centered("PONG ARENA", 0.f, 34.f, 1.15f, th.accent);
+		draw_rect(0.f, 25.f, 44.f, 0.22f, th.panel_border);
+
+		if (user_stats.pong_wins > 0 || user_stats.pong_best_rally > 0) {
+			draw_text_centered("WINS:", -26.f, 21.f, 0.30f, th.text_dim);
+			draw_number(user_stats.pong_wins, -10.f, 21.f, 0.32f, 0x22C55E);
+			draw_text_centered("BEST RALLY:", 12.f, 21.f, 0.30f, th.text_dim);
+			draw_number(user_stats.pong_best_rally, 34.f, 21.f, 0.32f, 0xFACC15);
+		}
 
 		const char* diff_label = (difficulty == DIFF_EASY) ? "DIFFICULTY: EASY" :
 		                         (difficulty == DIFF_HARD) ? "DIFFICULTY: HARD" : "DIFFICULTY: MEDIUM";
-		const char* arc_label  = arcade_mode ? "ARCADE POWERUPS: ON" : "ARCADE POWERUPS: OFF";
+		const char* arc_label  = arcade_mode ? "POWERUPS: ON" : "POWERUPS: OFF";
 		const char* win_label  = (win_score_idx == 0) ? "WIN SCORE: 5" :
 		                         (win_score_idx == 2) ? "WIN SCORE: 11" : "WIN SCORE: 7";
-		const char* thm_label  = (user_stats.pong_theme < 0) ? "THEME: FOLLOW HUB" :
-		                         (user_stats.pong_theme == 1) ? "THEME: CRT" :
-		                         (user_stats.pong_theme == 2) ? "THEME: SYNTHWAVE" : "THEME: CYBER";
 
-		const char* labels[8] = {
+		const char* labels[7] = {
 			"1 PLAYER (VS AI)",
 			"2 PLAYERS (LOCAL)",
 			diff_label,
 			arc_label,
 			win_label,
-			thm_label,
-			"GRAPHICS",
+			"SETTINGS",
 			"BACK TO HUB"
 		};
 
 		for (int i = 0; i < MENU_ITEMS; i++) {
-			float y = 16.f - i * 6.5f;
-			u32 col = th.text;
-			if (i == menu_selection) col = (i == 7) ? 0xEF4444 : ((i >= 2 && i <= 5) ? th.p2 : th.p1);
-			draw_text_centered(labels[i], 0.f, y, 0.50f, col);
+			float y = 14.f - i * 7.2f;
+			bool sel = (i == menu_selection);
+			draw_rect(0.f, y, 48.4f, 2.9f, sel ? th.accent : th.panel_border);
+			draw_rect(0.f, y, 48.0f, 2.5f, sel ? th.card_selected : th.card_bg);
+			u32 col = sel ? (i == 6 ? 0xEF4444 : th.text) : th.text_dim;
+			draw_text_centered(labels[i], 0.f, y, 0.42f, col);
 		}
 
-		float sel_y = 16.f - menu_selection * 6.5f;
-		draw_text_centered(">", -48.f, sel_y, 0.50f, th.accent);
-		draw_text_centered("<",  48.f, sel_y, 0.50f, th.accent);
-
-		draw_text_centered("CLICK/ENTER: SELECT   ESC: HUB   M: MUTE   F1: PERF HUD", 0.f, -40.f, 0.34f, th.text_dim);
+		draw_text_centered("CLICK/ENTER: SELECT   ESC: HUB   M: MUTE   F1: PERF HUD", 0.f, -40.5f, 0.30f, th.text_dim);
 		return GAME_CONTINUE;
 	}
 
 	if (game_state == STATE_PAUSED) {
-		const int PAUSE_ITEMS = 6;
+		const int PAUSE_ITEMS = 4;
 		if (vk_pressed(input, pong_binds.pause) || pressed(BUTTON_P)) {
 			game_state = STATE_PLAYING;
 			sfx(520, 45, 0.15f);
@@ -560,7 +527,7 @@ update(Input* input, float dt, float fps) {
 		float my = input->mouse_y;
 		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE);
 		for (int i = 0; i < PAUSE_ITEMS; i++) {
-			float y = 12.f - i * 7.2f;
+			float y = 8.f - i * 8.5f;
 			if (in_rect(mx, my, 0.f, y, 36.f, 3.0f)) {
 				if (input->mouse_moved && pause_selection != i) {
 					pause_selection = i;
@@ -573,23 +540,22 @@ update(Input* input, float dt, float fps) {
 		if (activate) {
 			if (pause_selection == 0) game_state = STATE_PLAYING;
 			else if (pause_selection == 1) start_new_match();
-			else if (pause_selection == 2) { controls_return_state = STATE_PAUSED; game_state = STATE_CONTROLS; }
-			else if (pause_selection == 3) { controls_return_state = STATE_PAUSED; game_state = STATE_SOUND; }
-			else if (pause_selection == 4) { controls_return_state = STATE_PAUSED; game_state = STATE_GRAPHICS; }
+			else if (pause_selection == 2) { controls_return_state = STATE_PAUSED; game_state = STATE_SETTINGS; }
 			else { game_state = STATE_MENU; pause_selection = 0; }
 			sfx(600, 60, 0.2f);
 		}
 
 		draw_arena_and_entities(th, true, fps);
-		draw_rect_alpha(0, 0, arena_half_size_x, arena_half_size_y, 0x050814, 0.74f);
-		draw_text_centered("PAUSED", 0.f, 26.f, 1.0f, th.accent);
-		const char* plabels[6] = { "RESUME", "RESTART", "CONTROLS", "SOUND", "GRAPHICS", "MAIN MENU" };
+		draw_rect_alpha(0, 0, arena_half_size_x, arena_half_size_y, 0x050814, 0.78f);
+		draw_text_centered("PAUSED", 0.f, 24.f, 1.0f, th.accent);
+		const char* plabels[4] = { "RESUME", "RESTART", "SETTINGS", "MAIN MENU" };
 		for (int i = 0; i < PAUSE_ITEMS; i++) {
-			float y = 12.f - i * 7.2f;
-			u32 col = (i == pause_selection) ? (i == 5 ? th.p2 : th.p1) : th.text;
-			draw_text_centered(plabels[i], 0.f, y, 0.52f, col);
+			float y = 8.f - i * 8.5f;
+			bool sel = (i == pause_selection);
+			draw_rect(0.f, y, 36.4f, 3.2f, sel ? th.accent : th.panel_border);
+			draw_rect(0.f, y, 36.0f, 2.8f, sel ? th.card_selected : th.card_bg);
+			draw_text_centered(plabels[i], 0.f, y, 0.46f, sel ? (i == 3 ? th.p2 : th.text) : th.text_dim);
 		}
-		draw_text_centered(">", -28.f, 12.f - pause_selection * 7.2f, 0.52f, th.accent);
 		return GAME_CONTINUE;
 	}
 

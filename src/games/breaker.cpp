@@ -2,8 +2,7 @@
 #include "utils.h"
 #include "renderer.h"
 #include "keybinds.h"
-#include "audio_ui.h"
-#include "graphics_ui.h"
+#include "settings_ui.h"
 #include "themes.h"
 #include "save.h"
 #include "game_interface.h"
@@ -16,9 +15,7 @@ enum Game_State {
 	STATE_INTRO,
 	STATE_MENU,
 	STATE_LEVEL_SELECT,
-	STATE_CONTROLS,
-	STATE_SOUND,
-	STATE_GRAPHICS,
+	STATE_SETTINGS,
 	STATE_PLAYING,
 	STATE_PAUSED,
 	STATE_LEVEL_CLEAR,
@@ -115,6 +112,7 @@ global_variable const char* LEVELS[BRK_NUM_LEVELS][BRK_ROWS] = {
 global_variable Game_State game_state = STATE_INTRO;
 global_variable float intro_timer = 0.f;
 global_variable int   intro_stage = 0;
+global_variable float menu_anim_t = 0.f;
 
 global_variable int menu_sel = 0;
 global_variable int level_sel = 0;
@@ -438,32 +436,10 @@ update(Input* input, float dt) {
 	// Hide OS cursor during active gameplay and intro splash
 	set_cursor_visible(game_state != STATE_PLAYING && game_state != STATE_INTRO);
 
-	if (game_state == STATE_CONTROLS) {
-		int tab = 1;
-		if (update_and_draw_keybinds_ui(input, &tab, false,
-		                                th.bg_outer, th.arena_bg, th.arena_border,
-		                                th.center_line, th.text, th.text_dim, th.accent)) {
-			save_user_data();
-			game_state = controls_return;
-		}
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_SOUND) {
-		if (update_and_draw_audio_ui(input,
-		                             th.bg_outer, th.arena_bg, th.arena_border,
-		                             th.center_line, th.text, th.text_dim, th.accent)) {
-			save_user_data();
-			game_state = controls_return;
-		}
-		return GAME_CONTINUE;
-	}
-
-	if (game_state == STATE_GRAPHICS) {
-		if (update_and_draw_graphics_ui(input,
-		                                th.bg_outer, th.arena_bg, th.arena_border,
-		                                th.center_line, th.text, th.text_dim, th.accent)) {
-			save_user_data();
+	if (game_state == STATE_SETTINGS) {
+		if (update_and_draw_settings_ui(input, 1,
+		                                th.bg_outer, th.panel_bg, th.panel_border,
+		                                th.card_bg, th.text, th.text_dim, th.accent)) {
 			game_state = controls_return;
 		}
 		return GAME_CONTINUE;
@@ -549,10 +525,11 @@ update(Input* input, float dt) {
 	}
 
 	// -----------------------------------------------------------------------
-	// MAIN MENU (Keyboard + Mouse + Theme)
+	// MAIN MENU (Creative Backdrop — No Bricks/Paddle Behind Menu)
 	// -----------------------------------------------------------------------
 	if (game_state == STATE_MENU) {
-		const int MENU_ITEMS = 7;
+		menu_anim_t += dt;
+		const int MENU_ITEMS = 4;
 		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { menu_sel = (menu_sel + MENU_ITEMS - 1) % MENU_ITEMS; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { menu_sel = (menu_sel + 1) % MENU_ITEMS; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_ESC)) {
@@ -562,64 +539,59 @@ update(Input* input, float dt) {
 
 		float mx = input->mouse_x;
 		float my = input->mouse_y;
+		bool clicked = pressed(BUTTON_MOUSE_LEFT);
 		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE);
 		for (int i = 0; i < MENU_ITEMS; i++) {
-			float y = 11.f - i * 6.8f;
-			if (in_rect(mx, my, 0.f, y, 42.f, 2.8f)) {
-				if (input->mouse_moved && menu_sel != i) {
+			float y = 8.f - i * 9.5f;
+			if (in_rect(mx, my, 0.f, y, 44.f, 3.4f)) {
+				if ((input->mouse_moved || clicked) && menu_sel != i) {
 					menu_sel = i;
 					sfx(440, 24, 0.10f);
 				}
-				if (pressed(BUTTON_MOUSE_LEFT)) { menu_sel = i; activate = true; }
+				if (clicked) { menu_sel = i; activate = true; }
 			}
 		}
-
-		int dir = 0;
-		if (pressed(BUTTON_LEFT))  dir = -1;
-		if (pressed(BUTTON_RIGHT)) dir = 1;
 
 		if (activate) {
 			if (menu_sel == 0) { start_campaign(0); return GAME_CONTINUE; }
 			else if (menu_sel == 1) { level_sel = 0; game_state = STATE_LEVEL_SELECT; return GAME_CONTINUE; }
-			else if (menu_sel == 2) { dir = 1; }
-			else if (menu_sel == 3) { controls_return = STATE_MENU; game_state = STATE_CONTROLS; return GAME_CONTINUE; }
-			else if (menu_sel == 4) { controls_return = STATE_MENU; game_state = STATE_SOUND; return GAME_CONTINUE; }
-			else if (menu_sel == 5) { controls_return = STATE_MENU; game_state = STATE_GRAPHICS; return GAME_CONTINUE; }
+			else if (menu_sel == 2) { controls_return = STATE_MENU; game_state = STATE_SETTINGS; return GAME_CONTINUE; }
 			else {
 				render_offset_x = 0.f; render_offset_y = 0.f;
 				return GAME_EXIT_TO_HUB;
 			}
 		}
-		if (dir != 0 && menu_sel == 2) {
-			int cur = user_stats.breaker_theme + 1;
-			cur = (cur + (dir > 0 ? 1 : 3)) % 4;
-			user_stats.breaker_theme = cur - 1;
-			save_user_data();
-			sfx(520, 35, 0.15f);
+
+		// Dedicated creative menu backdrop (no bricks/paddle)
+		clear_screen(th.bg_outer);
+		draw_rect(0.f, 0.f, arena_half_x + 1.2f, arena_half_y + 1.2f, th.panel_border);
+		draw_rect(0.f, 0.f, arena_half_x, arena_half_y, th.panel_bg);
+		for (float gx = -60.f; gx <= 60.f; gx += 30.f) draw_rect_alpha(gx, 0.f, 0.12f, 45.f, th.panel_border, 0.22f);
+		for (float gy = -30.f; gy <= 30.f; gy += 15.f) draw_rect_alpha(0.f, gy, 85.f, 0.12f, th.panel_border, 0.22f);
+		for (int s = 0; s < 16; s++) {
+			float sx = -75.f + ((s * 43) % 150);
+			float sy = 44.f - fmodf(menu_anim_t * (3.f + (s % 4) * 1.5f) + s * 6.f, 88.f);
+			draw_rect_alpha(sx, sy, 0.35f, 0.35f, th.accent, 0.35f);
 		}
 
-		draw_world(th, false);
-		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.78f);
-		draw_text_centered("NEON BREAKER", 0.f, 32.f, 1.15f, th.accent);
+		draw_text_centered("NEON BREAKER", 0.f, 34.f, 1.15f, th.accent);
+		draw_rect(0.f, 25.f, 44.f, 0.22f, th.panel_border);
 
 		if (user_stats.breaker_high_score > 0) {
-			draw_text_centered("HIGH SCORE:", -12.f, 21.f, 0.36f, th.text_dim);
-			draw_number(user_stats.breaker_high_score, 18.f, 21.f, 0.38f, 0xFACC15);
+			draw_text_centered("HIGH SCORE:", -12.f, 20.f, 0.34f, th.text_dim);
+			draw_number(user_stats.breaker_high_score, 18.f, 20.f, 0.36f, 0xFACC15);
 		}
 
-		const char* thm_label = (user_stats.breaker_theme < 0) ? "THEME: FOLLOW HUB" :
-		                        (user_stats.breaker_theme == 1) ? "THEME: CRT" :
-		                        (user_stats.breaker_theme == 2) ? "THEME: SYNTHWAVE" : "THEME: CYBER";
-		const char* mlabels[7] = {
-			"PLAY CAMPAIGN", "LEVEL SELECT", thm_label, "CONTROLS", "SOUND", "GRAPHICS", "BACK TO HUB"
-		};
+		const char* mlabels[4] = { "PLAY CAMPAIGN", "LEVEL SELECT", "SETTINGS", "BACK TO HUB" };
 		for (int i = 0; i < MENU_ITEMS; i++) {
-			float y = 11.f - i * 6.8f;
-			u32 col = (i == menu_sel) ? (i == 6 ? 0xEF4444 : th.p1) : th.text;
-			draw_text_centered(mlabels[i], 0.f, y, 0.48f, col);
+			float y = 8.f - i * 9.5f;
+			bool sel = (i == menu_sel);
+			draw_rect(0.f, y, 44.4f, 3.6f, sel ? th.accent : th.panel_border);
+			draw_rect(0.f, y, 44.0f, 3.2f, sel ? th.card_selected : th.card_bg);
+			u32 col = sel ? (i == 3 ? 0xEF4444 : th.text) : th.text_dim;
+			draw_text_centered(mlabels[i], 0.f, y, 0.46f, col);
 		}
-		draw_text_centered(">", -40.f, 11.f - menu_sel * 6.8f, 0.48f, th.accent);
-		draw_text_centered("CLICK/ENTER: SELECT   ESC: HUB   M: MUTE", 0.f, -40.f, 0.32f, th.text_dim);
+		draw_text_centered("CLICK/ENTER: SELECT   ESC: HUB   M: MUTE", 0.f, -40.f, 0.30f, th.text_dim);
 		return GAME_CONTINUE;
 	}
 
@@ -646,21 +618,23 @@ update(Input* input, float dt) {
 			return GAME_CONTINUE;
 		}
 
-		draw_world(th, false);
-		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.84f);
+		clear_screen(th.bg_outer);
+		draw_rect(0.f, 0.f, arena_half_x + 1.2f, arena_half_y + 1.2f, th.panel_border);
+		draw_rect(0.f, 0.f, arena_half_x, arena_half_y, th.panel_bg);
 		draw_text_centered("SELECT LEVEL", 0.f, 34.f, 0.90f, th.accent);
 		for (int i = 0; i < BRK_NUM_LEVELS; i++) {
 			float y = 21.f - i * 6.5f;
-			u32 col = (i == level_sel) ? th.p1 : th.text_dim;
-			draw_text_centered(LEVEL_NAMES[i], 0.f, y, 0.44f, col);
+			bool sel = (i == level_sel);
+			draw_rect(0.f, y, 44.4f, 2.7f, sel ? th.accent : th.panel_border);
+			draw_rect(0.f, y, 44.0f, 2.3f, sel ? th.card_selected : th.card_bg);
+			draw_text_centered(LEVEL_NAMES[i], 0.f, y, 0.40f, sel ? th.text : th.text_dim);
 		}
-		draw_text_centered(">", -44.f, 21.f - level_sel * 6.5f, 0.44f, th.accent);
-		draw_text_centered("CLICK/ENTER: PLAY   ESC: BACK", 0.f, -38.f, 0.34f, th.text_dim);
+		draw_text_centered("CLICK/ENTER: PLAY   ESC: BACK", 0.f, -38.f, 0.32f, th.text_dim);
 		return GAME_CONTINUE;
 	}
 
 	if (game_state == STATE_PAUSED) {
-		const int PAUSE_ITEMS = 6;
+		const int PAUSE_ITEMS = 4;
 		if (vk_pressed(input, breaker_binds.pause) || pressed(BUTTON_P)) { game_state = STATE_PLAYING; return GAME_CONTINUE; }
 		if (pressed(BUTTON_UP) || pressed(BUTTON_W))   { pause_sel = (pause_sel + PAUSE_ITEMS - 1) % PAUSE_ITEMS; sfx(440, 35, 0.15f); }
 		if (pressed(BUTTON_DOWN) || pressed(BUTTON_S)) { pause_sel = (pause_sel + 1) % PAUSE_ITEMS; sfx(440, 35, 0.15f); }
@@ -669,7 +643,7 @@ update(Input* input, float dt) {
 		float my = input->mouse_y;
 		bool activate = pressed(BUTTON_ENTER) || pressed(BUTTON_SPACE);
 		for (int i = 0; i < PAUSE_ITEMS; i++) {
-			float y = 12.f - i * 7.2f;
+			float y = 8.f - i * 8.5f;
 			if (in_rect(mx, my, 0.f, y, 36.f, 3.0f)) {
 				if (input->mouse_moved && pause_sel != i) {
 					pause_sel = i;
@@ -682,22 +656,21 @@ update(Input* input, float dt) {
 		if (activate) {
 			if (pause_sel == 0) game_state = STATE_PLAYING;
 			else if (pause_sel == 1) load_level(current_level);
-			else if (pause_sel == 2) { controls_return = STATE_PAUSED; game_state = STATE_CONTROLS; }
-			else if (pause_sel == 3) { controls_return = STATE_PAUSED; game_state = STATE_SOUND; }
-			else if (pause_sel == 4) { controls_return = STATE_PAUSED; game_state = STATE_GRAPHICS; }
+			else if (pause_sel == 2) { controls_return = STATE_PAUSED; game_state = STATE_SETTINGS; }
 			else game_state = STATE_MENU;
 			return GAME_CONTINUE;
 		}
 		draw_world(th, true);
-		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.75f);
-		draw_text_centered("PAUSED", 0.f, 26.f, 1.0f, th.accent);
-		const char* plabels[6] = { "RESUME", "RESTART LEVEL", "CONTROLS", "SOUND", "GRAPHICS", "MAIN MENU" };
+		draw_rect_alpha(0.f, 0.f, arena_half_x, arena_half_y, 0x050814, 0.78f);
+		draw_text_centered("PAUSED", 0.f, 24.f, 1.0f, th.accent);
+		const char* plabels[4] = { "RESUME", "RESTART LEVEL", "SETTINGS", "MAIN MENU" };
 		for (int i = 0; i < PAUSE_ITEMS; i++) {
-			float y = 12.f - i * 7.2f;
-			u32 col = (i == pause_sel) ? (i == 5 ? th.p2 : th.p1) : th.text;
-			draw_text_centered(plabels[i], 0.f, y, 0.50f, col);
+			float y = 8.f - i * 8.5f;
+			bool sel = (i == pause_sel);
+			draw_rect(0.f, y, 36.4f, 3.2f, sel ? th.accent : th.panel_border);
+			draw_rect(0.f, y, 36.0f, 2.8f, sel ? th.card_selected : th.card_bg);
+			draw_text_centered(plabels[i], 0.f, y, 0.46f, sel ? (i == 3 ? th.p2 : th.text) : th.text_dim);
 		}
-		draw_text_centered(">", -36.f, 12.f - pause_sel * 7.2f, 0.50f, th.accent);
 		return GAME_CONTINUE;
 	}
 
