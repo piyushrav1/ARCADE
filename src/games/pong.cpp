@@ -3,6 +3,7 @@
 #include "renderer.h"
 #include "keybinds.h"
 #include "audio_ui.h"
+#include "save.h"
 #include "game_interface.h"
 
 #define is_down(b) input->buttons[b].is_down
@@ -322,6 +323,7 @@ update(Input* input, float dt, float fps) {
 		if (update_and_draw_keybinds_ui(input, &tab, false,
 		                                th.bg_outer, th.arena_bg, th.arena_border,
 		                                th.center_line, th.text, th.text_dim, th.accent)) {
+			save_user_data();
 			game_state = controls_return_state;
 		}
 		return GAME_CONTINUE;
@@ -331,6 +333,7 @@ update(Input* input, float dt, float fps) {
 		if (update_and_draw_audio_ui(input,
 		                             th.bg_outer, th.arena_bg, th.arena_border,
 		                             th.center_line, th.text, th.text_dim, th.accent)) {
+			save_user_data();
 			game_state = controls_return_state;
 		}
 		return GAME_CONTINUE;
@@ -677,6 +680,9 @@ update(Input* input, float dt, float fps) {
 				if (score_1 >= target_score) {
 					gameover_selection = 0;
 					game_state = STATE_GAME_OVER;
+					if (best_rally > user_stats.pong_best_rally) user_stats.pong_best_rally = best_rally;
+					user_stats.pong_wins++;
+					save_user_data();
 					sfx(780, 220, 0.25f);
 					break;
 				} else {
@@ -691,6 +697,8 @@ update(Input* input, float dt, float fps) {
 				if (score_2 >= target_score) {
 					gameover_selection = 0;
 					game_state = STATE_GAME_OVER;
+					if (best_rally > user_stats.pong_best_rally) user_stats.pong_best_rally = best_rally;
+					save_user_data();
 					sfx(780, 220, 0.25f);
 					break;
 				} else {

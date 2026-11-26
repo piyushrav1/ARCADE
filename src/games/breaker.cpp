@@ -3,6 +3,7 @@
 #include "renderer.h"
 #include "keybinds.h"
 #include "audio_ui.h"
+#include "save.h"
 #include "game_interface.h"
 
 #define is_down(b) input->buttons[b].is_down
@@ -419,6 +420,7 @@ update(Input* input, float dt) {
 		if (update_and_draw_keybinds_ui(input, &tab, false,
 		                                0x0B1120, 0x0F172A, 0x334155,
 		                                0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+			save_user_data();
 			game_state = controls_return;
 		}
 		return GAME_CONTINUE;
@@ -428,6 +430,7 @@ update(Input* input, float dt) {
 		if (update_and_draw_audio_ui(input,
 		                             0x0B1120, 0x0F172A, 0x334155,
 		                             0x162033, 0xF1F5F9, 0x64748B, 0x22D3EE)) {
+			save_user_data();
 			game_state = controls_return;
 		}
 		return GAME_CONTINUE;
@@ -754,6 +757,8 @@ brick_hit_done:
 		lives--;
 		sfx(180, 160, 0.25f);
 		if (lives <= 0) {
+			if (score > user_stats.breaker_high_score) user_stats.breaker_high_score = score;
+			save_user_data();
 			game_state = STATE_GAME_OVER;
 			return GAME_CONTINUE;
 		}
@@ -762,6 +767,11 @@ brick_hit_done:
 
 	if (count_breakable_bricks() == 0) {
 		sfx(780, 220, 0.25f);
+		if (score > user_stats.breaker_high_score) user_stats.breaker_high_score = score;
+		if (current_level + 1 > user_stats.breaker_unlocked_level && current_level + 1 < BRK_NUM_LEVELS) {
+			user_stats.breaker_unlocked_level = current_level + 1;
+		}
+		save_user_data();
 		if (current_level + 1 >= BRK_NUM_LEVELS) game_state = STATE_VICTORY;
 		else game_state = STATE_LEVEL_CLEAR;
 		return GAME_CONTINUE;

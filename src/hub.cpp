@@ -3,6 +3,7 @@
 #include "renderer.h"
 #include "keybinds.h"
 #include "audio_ui.h"
+#include "save.h"
 #include "game_interface.h"
 
 #define pressed(b) (input->buttons[b].is_down && input->buttons[b].changed)
@@ -122,6 +123,10 @@ launch_selected_game() {
 
 void
 hub_init() {
+	load_user_data();
+	theme_idx = user_stats.hub_theme;
+	bgm_on = user_stats.hub_bgm_on;
+
 	u32 rng = 4242u;
 	for (int i = 0; i < HUB_MAX_STARS; i++) {
 		rng = rng * 1664525u + 1013904223u;
@@ -216,6 +221,7 @@ hub_update(Input* input, float dt, float fps) {
 		if (update_and_draw_keybinds_ui(input, &controls_tab, true,
 		                                th.bg_outer, th.panel_bg, th.panel_border,
 		                                th.card_bg, th.text, th.text_dim, th.accent)) {
+			save_user_data();
 			hub_state = HUB_MENU;
 		}
 		return;
@@ -226,6 +232,7 @@ hub_update(Input* input, float dt, float fps) {
 		if (update_and_draw_audio_ui(input,
 		                             th.bg_outer, th.panel_bg, th.panel_border,
 		                             th.card_bg, th.text, th.text_dim, th.accent)) {
+			save_user_data();
 			hub_state = HUB_MENU;
 		}
 		return;
@@ -242,14 +249,17 @@ hub_update(Input* input, float dt, float fps) {
 	if (pressed(BUTTON_M)) {
 		set_audio_muted(!is_audio_muted());
 		if (!is_audio_muted()) sfx(580, 45, 0.18f);
+		save_user_data();
 	}
 	if (pressed(BUTTON_B)) {
 		bgm_on = !bgm_on;
+		user_stats.hub_bgm_on = bgm_on;
 		set_bgm_enabled(bgm_on);
+		save_user_data();
 		sfx(520, 40, 0.16f);
 	}
-	if (pressed(BUTTON_T) || pressed(BUTTON_RIGHT)) { theme_idx = (theme_idx + 1) % 3; sfx(520, 35, 0.15f); }
-	if (pressed(BUTTON_LEFT))                         { theme_idx = (theme_idx + 2) % 3; sfx(520, 35, 0.15f); }
+	if (pressed(BUTTON_T) || pressed(BUTTON_RIGHT)) { theme_idx = (theme_idx + 1) % 3; user_stats.hub_theme = theme_idx; save_user_data(); sfx(520, 35, 0.15f); }
+	if (pressed(BUTTON_LEFT))                         { theme_idx = (theme_idx + 2) % 3; user_stats.hub_theme = theme_idx; save_user_data(); sfx(520, 35, 0.15f); }
 	if (pressed(BUTTON_UP) || pressed(BUTTON_W))      { selected_idx = (selected_idx + NUM_GAMES - 1) % NUM_GAMES; sfx(440, 35, 0.15f); }
 	if (pressed(BUTTON_DOWN) || pressed(BUTTON_S))    { selected_idx = (selected_idx + 1) % NUM_GAMES; sfx(440, 35, 0.15f); }
 
@@ -263,8 +273,8 @@ hub_update(Input* input, float dt, float fps) {
 	if (pressed(BUTTON_MOUSE_LEFT)) {
 		if (hov_keys) { controls_tab = selected_idx; hub_state = HUB_CONTROLS; sfx(520, 40, 0.16f); return; }
 		else if (hov_sound) { hub_state = HUB_SOUND; sfx(520, 40, 0.16f); return; }
-		else if (hov_theme) { theme_idx = (theme_idx + 1) % 3; sfx(520, 35, 0.15f); }
-		else if (hov_music) { bgm_on = !bgm_on; set_bgm_enabled(bgm_on); sfx(520, 40, 0.16f); }
+		else if (hov_theme) { theme_idx = (theme_idx + 1) % 3; user_stats.hub_theme = theme_idx; save_user_data(); sfx(520, 35, 0.15f); }
+		else if (hov_music) { bgm_on = !bgm_on; user_stats.hub_bgm_on = bgm_on; set_bgm_enabled(bgm_on); save_user_data(); sfx(520, 40, 0.16f); }
 	}
 
 	for (int i = 0; i < NUM_GAMES; i++) {
